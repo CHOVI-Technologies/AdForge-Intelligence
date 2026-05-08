@@ -1,260 +1,131 @@
 /**
- * AdForge Intelligence — Intake Form API
- * pages/api/intake.js
+ * AdForge Intelligence — Brand Intake Form
+ * pages/intake.jsx
  *
- * POST /api/intake
- *
- * WHAT WAS BROKEN & WHAT WAS FIXED:
- * 1. Was calling Zapier (old) — now calls Google Sheets via Apps Script
- * 2. Was using unverified Resend domain — now uses env var RESEND_FROM_EMAIL
- * 3. No order reference generated — now generates and returns orderRef
- * 4. Errors were silently swallowed — now logged clearly
- * 5. No input sanitization length limits — now sanitized
- *
- * FLOW:
- *   Client submits form → POST /api/intake
- *   → Validate required fields
- *   → Generate order reference
- *   → Save to Google Sheets (non-blocking — doesn't fail the request)
- *   → Send operator notification email
- *   → Send client confirmation email
- *   → Return { success: true, orderRef }
- *   → Client is redirected to Flutterwave with orderRef in tx_ref
+ * FIXES FROM PREVIOUS VERSION:
+ * 1. Stores orderRef + email in localStorage BEFORE redirecting to Flutterwave
+ *    so /confirm can read them even after Flutterwave redirect
+ * 2. Appends ?tx_ref={orderRef} to Flutterwave URL so FW sends it back
+ * 3. Real API call to /api/intake with proper error handling
+ * 4. Loading state on submit button — no double-clicks
+ * 5. Form state persists through step transitions (no data loss)
  */
 
-// pages/api/intake.js
-import { generateOrderRef } from "../../lib/auth";
-import { saveOrder }        from "../../lib/sheets";
-import { sendOperatorNotification, sendClientConfirmation } from "../../lib/email";
+// pages/intake.jsx
+import Head from "next/head";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/router";
+import Navbar from "../components/layout/Navbar";
+import Footer from "../components/layout/Footer";
+import { Icons } from "../components/ui/Icons";
+import { useAuth } from "../context/AuthContext";
+import { C, COUNTRIES, REVENUES, PLATFORMS, PRICE } from "../lib/constants";
 
-function validate(body) {
-  const errors = [];
-  if (!body.brandName?.trim())  errors.push("brandName is required");
-  if (!body.websiteUrl?.trim()) errors.push("websiteUrl is required");
-  if (!body.email?.trim())      errors.push("email is required");
-  if (body.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email)) errors.push("Invalid email");
-  if (body.websiteUrl && !/^https?:\/\/.+/.test(body.websiteUrl)) errors.push("websiteUrl must start with https://");
-  return errors;
-}
+const SITE = process.env.NEXT_PUBLIC_SITE_URL || "https://adforgeintelligence.onrender.com";
+const FLW_KEY = process.env.NEXT_PUBLIC_FLW_PUBLIC_KEY || "";
 
-function sanitize(body) {
-  const s = (v, max = 500) => String(v || "").trim().slice(0, max);
-  return {
-    brandName:   s(body.brandName, 200),
-    websiteUrl:  s(body.websiteUrl, 500),
-    email:       s(body.email, 254).toLowerCase(),
-    country:     s(body.country, 100),
-    audience:    s(body.audience, 500),
-    revenue:     s(body.revenue, 100),
-    platform:    s(body.platform, 100),
-    challenge:   s(body.challenge, 2000),
-    uploadName:  s(body.uploadName, 255),
-    uploadSize:  s(body.uploadSize, 50),
-    source:      "adforge-v3",
-    submittedAt: new Date().toISOString(),
-  };
-}
-
-export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
-
-  const body = req.body || {};
-
-  // ── Validate ──────────────────────────────────────────────────
-  const errors = validate(body);
-  if (errors.length > 0) {
-    return res.status(400).json({ error: errors[0], errors });
+// ── Trigger Flutterwave Inline Checkout ───────────────────────────
+function openFlutterwave({ orderRef, email, name, onClose }) {
+  if (typeof window === "undefined" || !window.FlutterwaveCheckout) {
+    alert("Payment system is loading. Please try again in a moment.");
+    return;
   }
 
-  // ── Build payload ─────────────────────────────────────────────
-  const orderRef = generateOrderRef();
-  const ip       = String(req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "").split(",")[0].trim();
-
-  const payload = {
-    ...sanitize(body),
-    orderRef,
-    ip,
-    paymentStatus: "pending",
-  };
-
-  // ── Console log — ALWAYS (emergency fallback record) ──────────
-  console.log("[intake] New submission:", JSON.stringify({
-    orderRef,
-    brand:   payload.brandName,
-    email:   payload.email,
-    country: payload.country,
-    ts:      payload.submittedAt,
-  }));
-
-  // ── Save to Google Sheets — non-blocking ──────────────────────
-  // We do NOT await — user gets instant response regardless of Sheets speed.
-  // If Sheets fails, console.log above is the emergency record.
-  saveOrder(payload)
-    .then(result => {
-      if (!result?.success) {
-        console.error("[intake] Sheets save failed:", result?.error || "unknown");
-      } else {
-        console.log("[intake] Sheets saved OK — orderRef:", orderRef);
-      }
-    })
-    .catch(err => console.error("[intake] Sheets exception:", err.message));
-
-  // ── Send emails — non-blocking ────────────────────────────────
-  Promise.allSettled([
-    sendOperatorNotification(payload),
-    sendClientConfirmation(payload),
-  ]).then(results => {
-    const labels = ["operator", "client"];
-    results.forEach((r, i) => {
-      if (r.status === "rejected") console.error(`[intake] ${labels[i]} email rejected:`, r.reason?.message);
-      else if (!r.value?.success)  console.error(`[intake] ${labels[i]} email failed:`,   r.value?.error);
-      else                         console.log(`[intake] ${labels[i]} email sent OK`);
-    });
-  });
-
-  // ── Return immediately with orderRef ──────────────────────────
-  return res.status(200).json({
-    success:  true,
-    orderRef: orderRef,
-    message:  "Intake received. Proceed to payment.",
+  window.FlutterwaveCheckout({
+    public_key:      FLW_KEY,
+    tx_ref:          orderRef,
+    amount:          397,
+    currency:        "USD",
+    payment_options: "card,banktransfer,ussd",
+    redirect_url:    `${SITE}/confirm`,
+    customer: {
+      email: email,
+      name:  name || email,
+    },
+    customizations: {
+      title:       "AdForge Intelligence",
+      description: "Competitor Ad Intelligence Report — 12-Hour Delivery",
+      logo:        `${SITE}/logo.png`,
+    },
+    callback: function (data) {
+      // Fires if user stays on page; redirect_url handles the main flow
+      console.log("[flw] callback status:", data.status);
+    },
+    onclose: function () {
+      onClose && onClose();
+    },
   });
 }
-const COUNTRY_OPTIONS = [
-  "United States",
-  "United Kingdom",
-  "Canada",
-  "Australia",
-  "Germany",
-  "France",
-  "Netherlands",
-  "Other (EU)",
-  "Other",
-];
 
-const INITIAL_FORM = {
-  brandName: "",
-  websiteUrl: "",
-  email: "",
-  country: "",
-  revenue: "",
-  platform: "",
-  challenge: "",
-  uploadName: "",
-  uploadSize: "",
-};
-
-// ── Shared Components ───────────────────────────────────────────
-function Field({ label, required, error, children }) {
+// ── Shared field components ───────────────────────────────────────
+function Label({ children, required }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <label className="form-label">
-        {label} {required && <span style={{ color: C.teal }}>*</span>}
-      </label>
-      {children}
-      {error && (
-        <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, color: "#FF6B6B" }}>
-          {error}
-        </span>
-      )}
-    </div>
+    <label style={{ display: "block", fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: C.muted, marginBottom: 8 }}>
+      {children}{required && <span style={{ color: C.teal }}> *</span>}
+    </label>
   );
 }
 
-function Input({ type = "text", name, value, onChange, placeholder, onBlur }) {
-  const [focused, setFocused] = useState(false);
+function Err({ msg }) {
+  return msg ? <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, color: C.error, marginTop: 5 }}>{msg}</p> : null;
+}
+
+const inputStyle = (err) => ({
+  width: "100%", padding: "13px 16px", borderRadius: 10,
+  border: `1.5px solid ${err ? C.error : "rgba(255,255,255,0.1)"}`,
+  background: "rgba(255,255,255,0.04)", color: C.text,
+  fontFamily: "'DM Sans',sans-serif", fontSize: 14,
+  outline: "none", transition: "border-color .2s, background .2s",
+  boxSizing: "border-box",
+});
+
+function TextInput({ name, value, onChange, placeholder, type = "text", error }) {
   return (
-    <input
-      type={type}
-      name={name}
-      value={value}
-      onChange={onChange}
-      placeholder={placeholder}
-      onFocus={() => setFocused(true)}
-      onBlur={() => { setFocused(false); onBlur && onBlur(); }}
-      className="form-input"
-      style={{ border: `1px solid ${focused ? "rgba(0,184,150,0.5)" : "rgba(255,255,255,0.1)"}` }}
-    />
+    <input name={name} value={value} onChange={onChange} placeholder={placeholder} type={type}
+      onFocus={e => { e.target.style.borderColor = "rgba(0,184,150,0.55)"; e.target.style.background = "rgba(0,184,150,0.04)"; }}
+      onBlur={e  => { e.target.style.borderColor = error ? C.error : "rgba(255,255,255,0.1)"; e.target.style.background = "rgba(255,255,255,0.04)"; }}
+      style={inputStyle(error)} />
   );
 }
 
-function Select({ name, value, onChange, options, placeholder }) {
+function SelectField({ name, value, onChange, options, placeholder }) {
   return (
-    <select name={name} value={value} onChange={onChange} className="form-input"
-      style={{ cursor: "pointer", appearance: "none" }}>
+    <select name={name} value={value} onChange={onChange}
+      style={{ ...inputStyle(false), cursor: "pointer", appearance: "none" }}>
       <option value="" disabled>{placeholder}</option>
-      {options.map(o => <option key={o} value={o}>{o}</option>)}
+      {options.map(o => <option key={o} value={o} style={{ background: C.surface }}>{o}</option>)}
     </select>
   );
 }
 
-function Textarea({ name, value, onChange, placeholder, rows = 4 }) {
-  const [focused, setFocused] = useState(false);
-  return (
-    <textarea
-      name={name} value={value} onChange={onChange}
-      placeholder={placeholder} rows={rows}
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
-      className="form-input"
-      style={{ resize: "vertical", border: `1px solid ${focused ? "rgba(0,184,150,0.5)" : "rgba(255,255,255,0.1)"}` }}
-    />
-  );
-}
-
-// ── Step Indicator ───────────────────────────────────────────────
+// ── Step Indicator ────────────────────────────────────────────────
 function StepIndicator({ current }) {
+  const steps = [{ n: 1, label: "Brand Identity" }, { n: 2, label: "Campaign Details" }, { n: 3, label: "Review & Pay" }];
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 0, marginBottom: 56 }}>
-      {STEPS.map((step, i) => {
-        const done    = current > step.n;
-        const active  = current === step.n;
-        const future  = current < step.n;
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 44 }}>
+      {steps.map(({ n, label }, i) => {
+        const done = current > n, active = current === n;
         return (
-          <div key={step.n} style={{ display: "flex", alignItems: "center" }}>
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-              {/* Circle */}
+          <div key={n} style={{ display: "flex", alignItems: "center" }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 7 }}>
               <div style={{
-                width: 42, height: 42,
-                borderRadius: "50%",
+                width: 40, height: 40, borderRadius: "50%",
                 display: "flex", alignItems: "center", justifyContent: "center",
-                background: done ? "linear-gradient(135deg,#00B896,#0066CC)"
-                           : active ? "linear-gradient(135deg,#C9A84C,#E8C876)"
-                           : "rgba(255,255,255,0.05)",
-                border: future ? "1px solid rgba(255,255,255,0.1)" : "none",
-                transition: "all 0.4s ease",
-                boxShadow: active ? "0 0 20px rgba(201,168,76,0.4)" : done ? "0 0 16px rgba(0,184,150,0.3)" : "none",
+                background: done ? C.grad : active ? C.gradGold : "rgba(255,255,255,.05)",
+                border: (!done && !active) ? `1px solid ${C.border}` : "none",
+                boxShadow: active ? "0 0 18px rgba(201,168,76,.4)" : done ? "0 0 14px rgba(0,184,150,.28)" : "none",
+                transition: "all .4s",
               }}>
                 {done
                   ? <Icons.Check size={16} color="#fff" />
-                  : <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 15, fontWeight: 900, color: active ? "#06081A" : C.textDim }}>
-                      {step.n}
-                    </span>
+                  : <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 14, fontWeight: 900, color: active ? "#06081A" : C.dim }}>{n}</span>
                 }
               </div>
-              {/* Label */}
-              <span style={{
-                fontFamily: "'DM Sans',sans-serif",
-                fontSize: 11,
-                fontWeight: 600,
-                letterSpacing: "0.05em",
-                color: active ? C.gold : done ? C.teal : C.textDim,
-                whiteSpace: "nowrap",
-                transition: "color 0.3s",
-              }}>
-                {step.label}
+              <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: ".05em", color: active ? C.gold : done ? C.teal : C.dim, whiteSpace: "nowrap" }}>
+                {label}
               </span>
             </div>
-            {/* Connector */}
-            {i < STEPS.length - 1 && (
-              <div style={{
-                width: 80, height: 1,
-                marginBottom: 22,
-                background: done
-                  ? "linear-gradient(90deg,#00B896,rgba(0,184,150,0.3))"
-                  : "rgba(255,255,255,0.08)",
-                transition: "background 0.4s ease",
-              }} />
-            )}
+            {i < 2 && <div style={{ width: 64, height: 1, marginBottom: 22, background: done ? `linear-gradient(90deg,${C.teal},rgba(0,184,150,.3))` : C.border, transition: "background .4s" }} />}
           </div>
         );
       })}
@@ -262,366 +133,383 @@ function StepIndicator({ current }) {
   );
 }
 
-// ── File Upload ──────────────────────────────────────────────────
-function FileUpload({ onFile, fileName }) {
-  const fileRef = useRef(null);
-  const [dragging, setDragging] = useState(false);
+// ── File Upload Zone ──────────────────────────────────────────────
+function FileZone({ uploadName, onFile }) {
+  const [drag, setDrag] = useState(false);
 
-  const handleFile = (file) => {
+  const handle = (file) => {
     if (!file) return;
-    const maxSize = 10 * 1024 * 1024; // 10MB
-    if (file.size > maxSize) { alert("File must be under 10MB."); return; }
+    if (file.size > 10 * 1024 * 1024) { alert("File must be under 10MB."); return; }
     onFile({ name: file.name, size: (file.size / 1024).toFixed(0) + " KB" });
   };
 
   return (
     <div
-      onClick={() => fileRef.current.click()}
-      onDragOver={e => { e.preventDefault(); setDragging(true); }}
-      onDragLeave={() => setDragging(false)}
-      onDrop={e => { e.preventDefault(); setDragging(false); handleFile(e.dataTransfer.files[0]); }}
+      onClick={() => document.getElementById("file-upload-input").click()}
+      onDragOver={e => { e.preventDefault(); setDrag(true); }}
+      onDragLeave={() => setDrag(false)}
+      onDrop={e => { e.preventDefault(); setDrag(false); handle(e.dataTransfer.files[0]); }}
       style={{
-        padding: "28px 24px",
-        borderRadius: 12,
-        border: `1.5px dashed ${dragging ? C.teal : fileName ? "rgba(0,184,150,0.5)" : "rgba(255,255,255,0.12)"}`,
-        background: dragging ? C.tealDim : fileName ? "rgba(0,184,150,0.04)" : "rgba(255,255,255,0.02)",
-        cursor: "pointer",
-        textAlign: "center",
-        transition: "all 0.2s ease",
+        padding: "24px 20px", borderRadius: 11, textAlign: "center", cursor: "pointer",
+        border: `1.5px dashed ${drag ? C.teal : uploadName ? "rgba(0,184,150,0.5)" : "rgba(255,255,255,0.12)"}`,
+        background: drag ? "rgba(0,184,150,.04)" : uploadName ? "rgba(0,184,150,.03)" : "rgba(255,255,255,.02)",
+        transition: "all .2s",
       }}
     >
-      <input ref={fileRef} type="file" accept="image/*,.pdf" onChange={e => handleFile(e.target.files[0])} style={{ display: "none" }} />
-      {fileName ? (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
-          <Icons.Check size={18} color={C.teal} />
-          <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, color: C.teal, fontWeight: 600 }}>{fileName}</span>
+      <input id="file-upload-input" type="file" accept="image/*,.pdf" style={{ display: "none" }}
+        onChange={e => handle(e.target.files[0])} />
+      {uploadName ? (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 9 }}>
+          <Icons.Check size={15} color={C.teal} />
+          <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, color: C.teal, fontWeight: 600 }}>{uploadName}</span>
         </div>
       ) : (
         <>
-          <div style={{ color: C.textDim, marginBottom: 10 }}><Icons.Upload size={24} /></div>
-          <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, color: C.textMuted }}>
-            Drop a file here or <span style={{ color: C.teal, textDecoration: "underline" }}>browse</span>
+          <Icons.Upload size={22} color={C.dim} />
+          <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, color: C.muted, marginTop: 8, marginBottom: 4 }}>
+            Drop a file or <span style={{ color: C.teal, textDecoration: "underline" }}>browse</span>
           </p>
-          <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, color: C.textDim, marginTop: 6 }}>
-            Screenshots, current creatives, or references · Max 10MB · PNG, JPG, PDF
-          </p>
+          <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, color: C.dim }}>Screenshots, creatives · Max 10MB · PNG, JPG, PDF</p>
         </>
       )}
     </div>
   );
 }
 
-// ── Step 1: Brand Identity ───────────────────────────────────────
-function Step1({ form, onChange, errors }) {
-  return (
-    <div style={{ display: "grid", gap: 22 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }} className="grid-2">
-        <Field label="Brand Name" required error={errors.brandName}>
-          <Input name="brandName" value={form.brandName} onChange={onChange} placeholder="e.g. Lumē Skincare" />
-        </Field>
-        <Field label="Website URL" required error={errors.websiteUrl}>
-          <Input name="websiteUrl" value={form.websiteUrl} onChange={onChange} placeholder="https://yourbrand.com" type="url" />
-        </Field>
-      </div>
-      <Field label="Email Address" required error={errors.email}>
-        <Input name="email" value={form.email} onChange={onChange} placeholder="you@yourbrand.com" type="email" />
-      </Field>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }} className="grid-2">
-        <Field label="Primary Market / Country" required error={errors.country}>
-          <Select name="country" value={form.country} onChange={onChange} options={COUNTRY_OPTIONS} placeholder="Select country..." />
-        </Field>
-        <Field label="Target Customer Profile" required={false} error={errors.audience}>
-          <Input name="audience" value={form.audience} onChange={onChange} placeholder="e.g. Women 28–45, anti-aging" />
-        </Field>
-      </div>
-    </div>
-  );
-}
+// ════════════════════════════════════════════════════════════════════
+// MAIN PAGE
+// ════════════════════════════════════════════════════════════════════
+const INIT = { brandName: "", websiteUrl: "", email: "", country: "", audience: "", revenue: "", platform: "", challenge: "", uploadName: "", uploadSize: "" };
 
-// ── Step 2: Campaign Details ─────────────────────────────────────
-function Step2({ form, onChange, onFile }) {
-  return (
-    <div style={{ display: "grid", gap: 22 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }} className="grid-2">
-        <Field label="Monthly Revenue Range" required={false}>
-          <Select name="revenue" value={form.revenue} onChange={onChange} options={REVENUE_OPTIONS} placeholder="Select range..." />
-        </Field>
-        <Field label="Primary Ad Platform" required={false}>
-          <Select name="platform" value={form.platform} onChange={onChange} options={PLATFORM_OPTIONS} placeholder="Select platform..." />
-        </Field>
-      </div>
-      <Field label="Primary Challenge or Goal" required={false}>
-        <Textarea
-          name="challenge"
-          value={form.challenge}
-          onChange={onChange}
-          placeholder="Describe your current ad performance challenge or what you're hoping to achieve. The more context you provide, the more targeted your report will be."
-          rows={4}
-        />
-      </Field>
-      <Field label="Reference Materials (Optional)" required={false}>
-        <FileUpload onFile={({ name, size }) => onFile(name, size)} fileName={form.uploadName} />
-      </Field>
-      <div style={{ padding: "16px 20px", borderRadius: 10, border: "1px solid rgba(201,168,76,0.18)", background: "rgba(201,168,76,0.04)" }}>
-        <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: C.textMuted, lineHeight: 1.7 }}>
-          <strong style={{ color: C.text }}>Tip: </strong>
-          Uploading your current ad creative or landing page screenshots helps us calibrate the report more precisely to your brand voice and existing creative direction.
-        </p>
-      </div>
-    </div>
-  );
-}
-
-// ── Step 3: Review & Confirm ─────────────────────────────────────
-function Step3({ form }) {
-  const reviewItems = [
-    { label: "Brand",    value: form.brandName },
-    { label: "Website",  value: form.websiteUrl },
-    { label: "Email",    value: form.email },
-    { label: "Market",   value: form.country || "Not specified" },
-    { label: "Platform", value: form.platform || "Not specified" },
-    { label: "Revenue",  value: form.revenue || "Not specified" },
-    { label: "Upload",   value: form.uploadName ? `${form.uploadName} (${form.uploadSize})` : "None" },
-  ];
-
-  return (
-    <div style={{ display: "grid", gap: 24 }}>
-      {/* Summary Card */}
-      <div style={{ borderRadius: 14, border: "1px solid rgba(255,255,255,0.07)", overflow: "hidden" }}>
-        <div style={{ padding: "14px 22px", background: "rgba(0,184,150,0.07)", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
-          <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, fontWeight: 700, letterSpacing: "0.08em", color: C.teal }}>
-            YOUR BRIEF SUMMARY
-          </span>
-        </div>
-        <div style={{ padding: "6px 0" }}>
-          {reviewItems.map(({ label, value }, i) => (
-            <div key={label} style={{
-              display: "flex", padding: "12px 22px",
-              background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.01)",
-              gap: 16,
-            }}>
-              <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, fontWeight: 600, color: C.textDim, minWidth: 90 }}>
-                {label}
-              </span>
-              <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: C.textMuted, wordBreak: "break-all" }}>
-                {value}
-              </span>
-            </div>
-          ))}
-          {form.challenge && (
-            <div style={{ padding: "12px 22px", borderTop: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.01)" }}>
-              <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, fontWeight: 600, color: C.textDim, marginBottom: 6 }}>CHALLENGE / GOAL</p>
-              <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: C.textMuted, lineHeight: 1.7 }}>{form.challenge}</p>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Order Summary */}
-      <div style={{ padding: "22px", borderRadius: 14, border: "1px solid rgba(201,168,76,0.22)", background: "rgba(201,168,76,0.04)" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 17, fontWeight: 700, color: C.text }}>
-            Ad Intelligence Report
-          </span>
-          <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 20, fontWeight: 900, background: "linear-gradient(135deg,#C9A84C,#E8C876)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-            {PRICE.display}
-          </span>
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {["5 high-performance campaign analyses", "Messaging framework deconstruction", "5 brand-adapted creative directions", "Conversion-optimised landing page angles", "Delivery within 12 hours to your inbox"].map(item => (
-            <div key={item} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <Icons.Check size={14} color={C.teal} />
-              <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: C.textMuted }}>{item}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Trust signals */}
-      <div style={{ display: "flex", justifyContent: "center", gap: 24, flexWrap: "wrap" }}>
-        {[
-          [<Icons.Shield size={14} />, "Performance guarantee"],
-          [<Icons.Lock size={14} />, "Secure Flutterwave checkout"],
-          [<Icons.Clock size={14} />, "12-hour delivery"],
-        ].map(([icon, label]) => (
-          <div key={label} style={{ display: "flex", alignItems: "center", gap: 7 }}>
-            <span style={{ color: C.teal }}>{icon}</span>
-            <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, color: C.textDim }}>{label}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ── Main Page ────────────────────────────────────────────────────
 export default function IntakePage() {
-  const [step, setStep] = useState(1);
-  const [form, setForm] = useState({ ...INITIAL_FORM, audience: "" });
-  const [errors, setErrors] = useState({});
-  const [loading, setLoading] = useState(false);
+  const router             = useRouter();
+  const { user, isLoggedIn, openAuth, authLoading } = useAuth();
+  const [step,     setStep]     = useState(1);
+  const [form,     setForm]     = useState(INIT);
+  const [errors,   setErrors]   = useState({});
+  const [apiError, setApiError] = useState("");
+  const [loading,  setLoading]  = useState(false);
+  const [cancelled,setCancelled]= useState(false);
 
-  const handle = e => setForm(p => ({ ...p, [e.target.name]: e.target.value }));
-  const handleFile = (name, size) => setForm(p => ({ ...p, uploadName: name, uploadSize: size }));
+  // ── Pre-fill email from auth ──────────────────────────────────
+  useEffect(() => {
+    if (user?.email && !form.email) {
+      setForm(p => ({ ...p, email: user.email }));
+    }
+    if (user?.brandName && !form.brandName) {
+      setForm(p => ({ ...p, brandName: user.brandName }));
+    }
+  }, [user]);
 
-  // Validate step 1
-  const validateStep1 = () => {
-    const errs = {};
-    if (!form.brandName.trim()) errs.brandName = "Brand name is required.";
-    if (!form.websiteUrl.trim()) errs.websiteUrl = "Website URL is required.";
-    else if (!/^https?:\/\/.+/.test(form.websiteUrl)) errs.websiteUrl = "Enter a valid URL starting with https://";
-    if (!form.email.trim()) errs.email = "Email is required.";
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errs.email = "Enter a valid email address.";
-    if (!form.country) errs.country = "Please select a country.";
-    setErrors(errs);
-    return Object.keys(errs).length === 0;
+  // ── Auth guard ────────────────────────────────────────────────
+  useEffect(() => {
+    if (!authLoading && !isLoggedIn) {
+      openAuth("signup", () => {}); // keep them on this page
+    }
+  }, [authLoading, isLoggedIn]);
+
+  const h = e => setForm(p => ({ ...p, [e.target.name]: e.target.value }));
+  const handleFile = ({ name, size }) => setForm(p => ({ ...p, uploadName: name, uploadSize: size }));
+
+  // ── Validate step 1 ────────────────────────────────────────────
+  const validate1 = () => {
+    const e = {};
+    if (!form.brandName.trim())  e.brandName  = "Brand name is required.";
+    if (!form.websiteUrl.trim()) e.websiteUrl = "Website URL is required.";
+    else if (!/^https?:\/\/.+/.test(form.websiteUrl)) e.websiteUrl = "Must start with https://";
+    if (!form.email.trim())      e.email      = "Email is required.";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = "Enter a valid email.";
+    if (!form.country)           e.country    = "Please select a market.";
+    setErrors(e);
+    return Object.keys(e).length === 0;
   };
 
   const next = () => {
-    if (step === 1 && !validateStep1()) return;
+    if (step === 1 && !validate1()) return;
     setStep(s => Math.min(s + 1, 3));
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const back = () => {
-    setStep(s => Math.max(s - 1, 1));
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
+  const back = () => { setStep(s => Math.max(s - 1, 1)); window.scrollTo({ top: 0, behavior: "smooth" }); };
 
-  // Submit: POST to API, then redirect to Flutterwave
+  // ── Submit → save to Sheets → open Flutterwave ────────────────
   const submit = async () => {
+    setApiError("");
     setLoading(true);
+    setCancelled(false);
+
     try {
-      const res = await fetch("/api/intake", {
-        method: "POST",
+      const res  = await fetch("/api/intake", {
+        method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, submittedAt: new Date().toISOString() }),
+        body:    JSON.stringify(form),
       });
-      if (!res.ok) throw new Error("API error");
-    } catch (err) {
-      console.error("[intake] submission error:", err);
-      // Still redirect — don't block payment on API failure
-    } finally {
-      // Redirect to payment
-      const paymentLink = process.env.NEXT_PUBLIC_FLUTTERWAVE_LINK;
-      if (paymentLink && paymentLink !== "#payment") {
-        window.location.href = paymentLink;
-      } else {
-        // Dev fallback
-        window.location.href = LINKS.confirm + "?status=successful&tx_ref=dev_" + Date.now();
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        setApiError(data.error || "Submission failed. Please try again.");
+        setLoading(false);
+        return;
       }
+
+      const orderRef = data.orderRef;
+
+      // Store in localStorage BEFORE redirect — survives Flutterwave redirect
+      if (typeof window !== "undefined") {
+        localStorage.setItem("af_orderRef", orderRef);
+        localStorage.setItem("af_email",    form.email);
+      }
+
+      setLoading(false);
+
+      // Open Flutterwave inline — redirect_url handles post-payment
+      openFlutterwave({
+        orderRef,
+        email: form.email,
+        name:  form.brandName,
+        onClose: () => setCancelled(true),
+      });
+
+    } catch (err) {
+      console.error("[intake] submit error:", err);
+      setApiError("Network error. Please check your connection and try again.");
+      setLoading(false);
     }
   };
+
+  // ── Loading while checking auth ───────────────────────────────
+  if (authLoading) {
+    return (
+      <div style={{ background: C.bg, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ width: 40, height: 40, border: `3px solid ${C.border}`, borderTop: `3px solid ${C.teal}`, borderRadius: "50%", animation: "spin .9s linear infinite" }} />
+        <style>{"@keyframes spin{to{transform:rotate(360deg)}}"}</style>
+      </div>
+    );
+  }
+
+  // ── Not logged in — show prompt (modal will be open) ──────────
+  if (!isLoggedIn) {
+    return (
+      <>
+        <Head><title>Sign Up Required — AdForge Intelligence</title></Head>
+        <Navbar />
+        <div style={{ background: C.bg, minHeight: "70vh", display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 24px", textAlign: "center" }}>
+          <div>
+            <div style={{ fontSize: 48, marginBottom: 20 }}>🔒</div>
+            <h1 style={{ fontFamily: "'Playfair Display',serif", fontSize: 28, fontWeight: 800, color: C.text, marginBottom: 14 }}>Account required</h1>
+            <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 15, color: C.muted, marginBottom: 28, maxWidth: 400, margin: "0 auto 28px", lineHeight: 1.7 }}>
+              Create a free account or sign in to commission your intelligence report.
+            </p>
+            <button onClick={() => openAuth("signup")}
+              style={{ padding: "14px 30px", borderRadius: 11, border: "none", background: C.grad, color: "#fff", fontFamily: "'DM Sans',sans-serif", fontSize: 15, fontWeight: 700, cursor: "pointer", boxShadow: "0 0 28px rgba(0,184,150,.25)" }}>
+              Create Account →
+            </button>
+          </div>
+        </div>
+        <Footer />
+      </>
+    );
+  }
+
+  const titles = ["Tell us about your brand.", "Share your campaign context.", "Review and proceed to payment."];
+  const subs   = ["Basic details that help us identify the right competitive landscape.", "Campaign context that lets us calibrate the report precisely.", "Confirm your details, then complete secure payment to lock in your slot."];
+  const G2 = { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 16 };
 
   return (
     <>
       <Head>
         <title>Request Your Report — AdForge Intelligence</title>
-        <meta name="description" content="Commission your precision ad intelligence report. Takes under 5 minutes." />
+        <meta name="description" content="Commission your precision ad intelligence report." />
         <meta name="robots" content="noindex" />
       </Head>
 
       <Navbar />
 
-      <main style={{ minHeight: "calc(100vh - 70px)", padding: "52px 24px 96px" }}>
-        <div style={{ maxWidth: 680, margin: "0 auto" }}>
+      <main style={{ background: C.bg, minHeight: "calc(100vh - 68px)", padding: "48px 20px 88px" }}>
+        <div style={{ maxWidth: 660, margin: "0 auto" }}>
 
           {/* Header */}
-          <div style={{ textAlign: "center", marginBottom: 52 }}>
-            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "7px 16px", borderRadius: 100, border: "1px solid rgba(201,168,76,0.28)", background: "rgba(201,168,76,0.07)", marginBottom: 24 }}>
-              <Icons.Sparkles size={14} color={COLORS.gold} />
-              <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, fontWeight: 700, letterSpacing: "0.08em", color: COLORS.gold }}>
-                STEP {step} OF 3
-              </span>
+          <div style={{ textAlign: "center", marginBottom: 44 }}>
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "7px 16px", borderRadius: 100, border: "1px solid rgba(201,168,76,.28)", background: "rgba(201,168,76,.07)", marginBottom: 20 }}>
+              <Icons.Spark size={13} color={C.gold} />
+              <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: ".09em", color: C.gold }}>STEP {step} OF 3</span>
             </div>
-            <h1 style={{ fontFamily: "'Playfair Display',serif", fontSize: "clamp(28px,4vw,42px)", fontWeight: 800, color: C.text, letterSpacing: "-0.025em", lineHeight: 1.12, marginBottom: 14 }}>
-              {step === 1 ? "Tell us about your brand." : step === 2 ? "Share your campaign context." : "Review and proceed to payment."}
+            <h1 style={{ fontFamily: "'Playfair Display',serif", fontSize: "clamp(24px,4vw,38px)", fontWeight: 800, color: C.text, letterSpacing: "-.025em", lineHeight: 1.12, marginBottom: 10 }}>
+              {titles[step - 1]}
             </h1>
-            <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 15, color: C.textMuted }}>
-              {step === 1 ? "Basic details that help us identify the right competitive landscape for your brand." :
-               step === 2 ? "Campaign details that allow us to calibrate the intelligence report precisely." :
-               "Confirm your details are correct, then complete secure payment to lock in your slot."}
-            </p>
+            <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, color: C.muted }}>{subs[step - 1]}</p>
           </div>
 
-          {/* Step Indicator */}
           <StepIndicator current={step} />
 
-          {/* Form Card */}
-          <div style={{ padding: "40px", borderRadius: 20, border: "1px solid rgba(255,255,255,0.08)", background: C.bgSurface, marginBottom: 24 }}>
-            <div style={{ animation: "fadeUp 0.35s ease both" }} key={step}>
-              {step === 1 && <Step1 form={form} onChange={handle} errors={errors} />}
-              {step === 2 && <Step2 form={form} onChange={handle} onFile={handleFile} />}
-              {step === 3 && <Step3 form={form} />}
-            </div>
+          {/* Form card */}
+          <div style={{ padding: "36px 28px", borderRadius: 20, border: "1px solid rgba(255,255,255,.08)", background: C.surface, marginBottom: 20 }} key={step}>
+
+            {/* STEP 1 */}
+            {step === 1 && (
+              <div style={{ display: "grid", gap: 20 }}>
+                <div style={G2}>
+                  <div>
+                    <Label required>Brand Name</Label>
+                    <TextInput name="brandName" value={form.brandName} onChange={h} placeholder="e.g. Lumē Skincare" error={errors.brandName} />
+                    <Err msg={errors.brandName} />
+                  </div>
+                  <div>
+                    <Label required>Website URL</Label>
+                    <TextInput name="websiteUrl" value={form.websiteUrl} onChange={h} placeholder="https://yourbrand.com" type="url" error={errors.websiteUrl} />
+                    <Err msg={errors.websiteUrl} />
+                  </div>
+                </div>
+                <div>
+                  <Label required>Email Address</Label>
+                  <TextInput name="email" value={form.email} onChange={h} placeholder="you@yourbrand.com" type="email" error={errors.email} />
+                  <Err msg={errors.email} />
+                </div>
+                <div style={G2}>
+                  <div>
+                    <Label required>Primary Market</Label>
+                    <SelectField name="country" value={form.country} onChange={h} options={COUNTRIES} placeholder="Select country..." />
+                    <Err msg={errors.country} />
+                  </div>
+                  <div>
+                    <Label>Target Customer</Label>
+                    <TextInput name="audience" value={form.audience} onChange={h} placeholder="e.g. Women 28–45, anti-aging" />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* STEP 2 */}
+            {step === 2 && (
+              <div style={{ display: "grid", gap: 20 }}>
+                <div style={G2}>
+                  <div>
+                    <Label>Monthly Revenue</Label>
+                    <SelectField name="revenue" value={form.revenue} onChange={h} options={REVENUES} placeholder="Select range..." />
+                  </div>
+                  <div>
+                    <Label>Ad Platform</Label>
+                    <SelectField name="platform" value={form.platform} onChange={h} options={PLATFORMS} placeholder="Select platform..." />
+                  </div>
+                </div>
+                <div>
+                  <Label>Primary Challenge or Goal</Label>
+                  <textarea name="challenge" value={form.challenge} onChange={h} rows={4}
+                    placeholder="Describe your current ad performance challenge or what you're hoping to achieve. More context = more targeted report."
+                    onFocus={e => e.target.style.borderColor = "rgba(0,184,150,0.55)"}
+                    onBlur={e  => e.target.style.borderColor = "rgba(255,255,255,0.1)"}
+                    style={{ ...inputStyle(false), resize: "vertical" }} />
+                </div>
+                <div>
+                  <Label>Reference Materials (Optional)</Label>
+                  <FileZone uploadName={form.uploadName} onFile={handleFile} />
+                </div>
+                <div style={{ padding: "13px 16px", borderRadius: 9, border: "1px solid rgba(201,168,76,.18)", background: "rgba(201,168,76,.04)" }}>
+                  <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: C.muted, lineHeight: 1.7 }}>
+                    <strong style={{ color: C.text }}>Tip:</strong> Uploading your current ad creative helps calibrate the report to your existing brand voice and direction.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* STEP 3 — Review */}
+            {step === 3 && (
+              <div style={{ display: "grid", gap: 20 }}>
+                {/* Summary table */}
+                <div style={{ borderRadius: 13, border: `1px solid ${C.border}`, overflow: "hidden" }}>
+                  <div style={{ padding: "12px 18px", background: "rgba(0,184,150,.07)", borderBottom: `1px solid ${C.border}` }}>
+                    <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: ".08em", color: C.teal }}>BRIEF SUMMARY</span>
+                  </div>
+                  {[["Brand", form.brandName || "—"], ["Website", form.websiteUrl || "—"], ["Email", form.email || "—"], ["Market", form.country || "Not specified"], ["Platform", form.platform || "Not specified"], ["Revenue", form.revenue || "Not specified"]].map(([k, v], i) => (
+                    <div key={k} style={{ display: "flex", padding: "10px 18px", background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,.01)", gap: 14 }}>
+                      <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, fontWeight: 600, color: C.dim, minWidth: 75 }}>{k}</span>
+                      <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: C.muted, wordBreak: "break-all" }}>{v}</span>
+                    </div>
+                  ))}
+                  {form.challenge && (
+                    <div style={{ padding: "10px 18px", borderTop: `1px solid ${C.border}` }}>
+                      <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: 700, color: C.dim, letterSpacing: ".06em", marginBottom: 5 }}>CHALLENGE</p>
+                      <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: C.muted, lineHeight: 1.7 }}>{form.challenge}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Order box */}
+                <div style={{ padding: "18px", borderRadius: 13, border: "1px solid rgba(201,168,76,.22)", background: "rgba(201,168,76,.04)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                    <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 16, fontWeight: 700, color: C.text }}>Ad Intelligence Report</span>
+                    <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 20, fontWeight: 900, background: "linear-gradient(135deg,#C9A84C,#E8C876)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>{PRICE.display}</span>
+                  </div>
+                  {["5 high-performance campaign analyses", "Messaging framework deconstruction", "5 brand-adapted creative directions", "Conversion-optimised landing page angles", "Delivery within 12 hours to your inbox"].map(item => (
+                    <div key={item} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
+                      <Icons.Check size={13} color={C.teal} />
+                      <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: C.muted }}>{item}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Trust */}
+                <div style={{ display: "flex", justifyContent: "center", gap: 20, flexWrap: "wrap" }}>
+                  {[["Shield","Performance guarantee"],["Lock","Secure Flutterwave"],["Clock","12-hour delivery"]].map(([ic, label]) => (
+                    <div key={label} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      {ic === "Shield" && <Icons.Shield size={13} color={C.teal} />}
+                      {ic === "Lock"   && <Icons.Lock   size={13} color={C.teal} />}
+                      {ic === "Clock"  && <Icons.Clock  size={13} color={C.teal} />}
+                      <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, color: C.dim }}>{label}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Payment cancelled notice */}
+                {cancelled && (
+                  <div style={{ padding: "14px 16px", borderRadius: 9, border: "1px solid rgba(245,158,11,.3)", background: "rgba(245,158,11,.06)" }}>
+                    <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: "#F59E0B", margin: 0 }}>
+                      Payment was not completed. No charge was made. Click below to try again.
+                    </p>
+                  </div>
+                )}
+
+                {apiError && (
+                  <div style={{ padding: "14px 16px", borderRadius: 9, border: "1px solid rgba(255,107,107,.3)", background: "rgba(255,107,107,.06)" }}>
+                    <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: C.error, margin: 0 }}>{apiError}</p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Navigation */}
           <div style={{ display: "flex", gap: 12, justifyContent: step > 1 ? "space-between" : "flex-end" }}>
             {step > 1 && (
-              <button onClick={back} style={{
-                padding: "13px 24px", borderRadius: 10,
-                border: "1px solid rgba(255,255,255,0.1)",
-                background: "transparent", color: C.textMuted,
-                fontFamily: "'DM Sans',sans-serif", fontSize: 14, fontWeight: 600,
-                cursor: "pointer", transition: "all 0.2s",
-              }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.25)"; e.currentTarget.style.color = C.text; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = C.textMuted; }}
-              >
+              <button onClick={back} style={{ padding: "13px 22px", borderRadius: 10, border: `1px solid ${C.border}`, background: "transparent", color: C.muted, fontFamily: "'DM Sans',sans-serif", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
                 ← Back
               </button>
             )}
 
             {step < 3 ? (
-              <button onClick={next} style={{
-                padding: "13px 32px", borderRadius: 10, border: "none",
-                background: "linear-gradient(135deg, #00B896, #0066CC)",
-                color: "#fff", fontFamily: "'DM Sans',sans-serif",
-                fontSize: 15, fontWeight: 700, cursor: "pointer",
-                boxShadow: "0 0 28px rgba(0,184,150,0.28)",
-                display: "flex", alignItems: "center", gap: 8,
-                letterSpacing: "-0.01em",
-              }}>
-                Continue <Icons.ArrowRight size={16} />
+              <button onClick={next} style={{ padding: "13px 30px", borderRadius: 10, border: "none", background: C.grad, color: "#fff", fontFamily: "'DM Sans',sans-serif", fontSize: 15, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, boxShadow: "0 0 24px rgba(0,184,150,.25)" }}>
+                Continue <Icons.Arrow size={15} color="#fff" />
               </button>
             ) : (
-              <button onClick={submit} disabled={loading} style={{
-                padding: "15px 36px", borderRadius: 10, border: "none",
-                background: loading ? "rgba(255,255,255,0.1)" : "linear-gradient(135deg, #C9A84C, #E8C876)",
-                color: loading ? C.textMuted : "#06081A",
-                fontFamily: "'DM Sans',sans-serif", fontSize: 15, fontWeight: 800,
-                cursor: loading ? "not-allowed" : "pointer",
-                boxShadow: loading ? "none" : "0 0 28px rgba(201,168,76,0.35)",
-                display: "flex", alignItems: "center", gap: 10,
-                letterSpacing: "-0.01em", transition: "all 0.25s",
-              }}>
+              <button onClick={submit} disabled={loading}
+                style={{ padding: "15px 28px", borderRadius: 10, border: "none", background: loading ? C.elevated : "linear-gradient(135deg,#C9A84C,#E8C876)", color: loading ? C.muted : "#06081A", fontFamily: "'DM Sans',sans-serif", fontSize: 15, fontWeight: 800, cursor: loading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 10, boxShadow: loading ? "none" : "0 0 28px rgba(201,168,76,.3)", transition: "all .25s" }}>
                 {loading ? (
-                  <>
-                    <span style={{ width: 16, height: 16, border: "2px solid rgba(0,0,0,0.2)", borderTop: "2px solid #06081A", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-                    Saving details...
-                  </>
+                  <><span style={{ width: 16, height: 16, border: "2px solid rgba(0,0,0,.2)", borderTop: "2px solid #06081A", borderRadius: "50%", animation: "spin .8s linear infinite" }} />Saving details…</>
                 ) : (
-                  <>
-                    Confirm & Proceed to Payment — {PRICE.display}
-                    <Icons.ArrowRight size={16} color="#06081A" />
-                  </>
+                  <>Confirm &amp; Pay {PRICE.display} <Icons.Arrow size={15} color="#06081A" /></>
                 )}
               </button>
             )}
           </div>
 
-          {/* Support note */}
-          <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, color: C.textDim, textAlign: "center", marginTop: 28 }}>
-            Questions? Email us at{" "}
-            <a href={`mailto:${BRAND.email}`} style={{ color: C.teal, textDecoration: "none" }}>
-              {BRAND.email}
-            </a>
+          <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, color: C.dim, textAlign: "center", marginTop: 20 }}>
+            Questions? <a href="mailto:chovitechnologies@gmail.com" style={{ color: C.teal }}>chovitechnologies@gmail.com</a>
           </p>
+
         </div>
       </main>
-
       <Footer />
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </>
   );
 }
