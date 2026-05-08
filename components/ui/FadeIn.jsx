@@ -53,6 +53,30 @@ export default function FadeIn({
         transform: visible ? "translateY(0)" : `translateY(${distance}px)`,
         transition: `opacity ${duration}s ease ${delay}s, transform ${duration}s ease ${delay}s`,
         ...style,
+      }}>
+      {children}
+    </Tag>
+  );
+}
+          observer.disconnect();
+        }
+      },
+      { threshold }
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [threshold]);
+
+  return (
+    <Tag
+      ref={ref}
+      className={className}
+      style={{
+        opacity: visible ? 1 : 0,
+        transform: visible ? "translateY(0)" : `translateY(${distance}px)`,
+        transition: `opacity ${duration}s ease ${delay}s, transform ${duration}s ease ${delay}s`,
+        ...style,
       }}
     >
       {children}
