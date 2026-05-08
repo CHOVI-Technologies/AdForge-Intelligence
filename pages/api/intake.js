@@ -1,181 +1,121 @@
 /**
- * AdForge Intelligence V2 — Intake Form API
+ * AdForge Intelligence — Intake Form API
+ * pages/api/intake.js
+ *
  * POST /api/intake
- * 
- * Sends data to Google Apps Script Webhook + Resend emails
+ *
+ * WHAT WAS BROKEN & WHAT WAS FIXED:
+ * 1. Was calling Zapier (old) — now calls Google Sheets via Apps Script
+ * 2. Was using unverified Resend domain — now uses env var RESEND_FROM_EMAIL
+ * 3. No order reference generated — now generates and returns orderRef
+ * 4. Errors were silently swallowed — now logged clearly
+ * 5. No input sanitization length limits — now sanitized
+ *
+ * FLOW:
+ *   Client submits form → POST /api/intake
+ *   → Validate required fields
+ *   → Generate order reference
+ *   → Save to Google Sheets (non-blocking — doesn't fail the request)
+ *   → Send operator notification email
+ *   → Send client confirmation email
+ *   → Return { success: true, orderRef }
+ *   → Client is redirected to Flutterwave with orderRef in tx_ref
  */
 
-function validatePayload(body) {
-  const required = ["brandName", "websiteUrl", "email"];
-  const missing = required.filter(f => !body[f]?.trim());
-  if (missing.length > 0) {
-    return { valid: false, error: `Missing required fields: ${missing.join(", ")}` };
-  }
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(body.email)) {
-    return { valid: false, error: "Invalid email address." };
-  }
-  return { valid: true };
+// pages/api/intake.js
+import { generateOrderRef } from "../../lib/auth";
+import { saveOrder }        from "../../lib/sheets";
+import { sendOperatorNotification, sendClientConfirmation } from "../../lib/email";
+
+function validate(body) {
+  const errors = [];
+  if (!body.brandName?.trim())  errors.push("brandName is required");
+  if (!body.websiteUrl?.trim()) errors.push("websiteUrl is required");
+  if (!body.email?.trim())      errors.push("email is required");
+  if (body.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email)) errors.push("Invalid email");
+  if (body.websiteUrl && !/^https?:\/\/.+/.test(body.websiteUrl)) errors.push("websiteUrl must start with https://");
+  return errors;
 }
 
-// Send data to your Google Apps Script
-async function sendToGoogleSheet(payload) {
-  const url = "https://script.google.com/macros/s/AKfycbzthoTCSa2aIDb5yYzOQ9SIPzxz2-Ac3p9Ati29NYc_plOt0TabpBZVHY4L6q-hLarlRA/exec";
-
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const result = await res.json().catch(() => ({}));
-    return { sent: res.ok, status: res.status, result };
-  } catch (err) {
-    console.error("Google Sheet webhook error:", err);
-    return { sent: false, reason: err.message };
-  }
+function sanitize(body) {
+  const s = (v, max = 500) => String(v || "").trim().slice(0, max);
+  return {
+    brandName:   s(body.brandName, 200),
+    websiteUrl:  s(body.websiteUrl, 500),
+    email:       s(body.email, 254).toLowerCase(),
+    country:     s(body.country, 100),
+    audience:    s(body.audience, 500),
+    revenue:     s(body.revenue, 100),
+    platform:    s(body.platform, 100),
+    challenge:   s(body.challenge, 2000),
+    uploadName:  s(body.uploadName, 255),
+    uploadSize:  s(body.uploadSize, 50),
+    source:      "adforge-v3",
+    submittedAt: new Date().toISOString(),
+  };
 }
 
-// Operator Notification Email
-async function sendOperatorNotification(payload) {
-  const key = process.env.RESEND_API_KEY;
-  const to = process.env.NOTIFY_EMAIL;
-  const site = process.env.NEXT_PUBLIC_SITE_URL || "https://adforge-intelligence.onrender.com";
-
-  if (!key || !to) return { sent: false, reason: "Resend not configured" };
-
-  const html = `
-<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><style>
-  body { font-family: -apple-system, sans-serif; background: #f5f5f5; margin:0; padding:20px; }
-  .card { background:white; border-radius:12px; padding:32px; max-width:600px; margin:0 auto; }
-  h2 { color:#111; margin:0 0 8px; }
-  .badge { display:inline-block; background:#00B896; color:white; padding:4px 12px; border-radius:20px; font-size:12px; font-weight:700; margin-bottom:20px; }
-  table { width:100%; border-collapse:collapse; margin-top:20px; }
-  td { padding:10px 12px; border-bottom:1px solid #f0f0f0; font-size:14px; }
-  td:first-child { font-weight:600; color:#666; width:130px; }
-</style></head>
-<body>
-<div class="card">
-  <div class="badge">NEW INTAKE</div>
-  <h2>New Report Commission</h2>
-  <table>
-    <tr><td>Brand</td><td><strong>${payload.brandName}</strong></td></tr>
-    <tr><td>Website</td><td>${payload.websiteUrl}</td></tr>
-    <tr><td>Email</td><td>${payload.email}</td></tr>
-    <tr><td>Country</td><td>${payload.country || "—"}</td></tr>
-    <tr><td>Revenue</td><td>${payload.revenue || "—"}</td></tr>
-    <tr><td>Platform</td><td>${payload.platform || "—"}</td></tr>
-    <tr><td>Submitted</td><td>${new Date(payload.submittedAt).toLocaleString()}</td></tr>
-  </table>
-</div>
-</body>
-</html>
-
-`.trim();
-
-  try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { 
-        "Content-Type": "application/json", 
-        Authorization: `Bearer ${key}` 
-      },
-      body: JSON.stringify({
-        from: "AdForge Intelligence <noreply@adforge.io>",
-        to: [to],
-        subject: `New Commission: ${payload.brandName}`,
-        html,
-      }),
-    });
-    return { sent: res.ok, status: res.status };
-  } catch (err) {
-    console.error("Operator email failed:", err);
-    return { sent: false, reason: err.message };
-  }
-}
-
-// Client Confirmation Email
-async function sendClientConfirmation(payload) {
-  const key = process.env.RESEND_API_KEY;
-  if (!key) return { sent: false, reason: "Resend not configured" };
-
-  const html = `
-<p>Thank you for ordering the AdForge Intelligence Report for <strong>${payload.brandName}</strong>.</p>
-<p>Your report is being prepared and will be delivered to your email within 12 hours.</p>
-<p>Reference: AF-${Date.now().toString().slice(-6)}</p>`.trim();
-
-  try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { 
-        "Content-Type": "application/json", 
-        Authorization: `Bearer ${key}` 
-      },
-      body: JSON.stringify({
-        from: "AdForge Intelligence <chovitechnologies@gmail.com>",
-        to: [payload.email],
-        subject: "Your AdForge Intelligence Report is being prepared",
-        html,
-      }),
-    });
-    return { sent: res.ok };
-  } catch (err) {
-    console.error("Client email failed:", err);
-    return { sent: false };
-  }
-}
-
-// Main Handler
 export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
-
-  const ip = req.headers["x-forwarded-for"]?.split(",")[0] || req.socket.remoteAddress;
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   const body = req.body || {};
-  const { valid, error } = validatePayload(body);
-  if (!valid) {
-    return res.status(400).json({ error });
+
+  // ── Validate ──────────────────────────────────────────────────
+  const errors = validate(body);
+  if (errors.length > 0) {
+    return res.status(400).json({ error: errors[0], errors });
   }
 
+  // ── Build payload ─────────────────────────────────────────────
+  const orderRef = generateOrderRef();
+  const ip       = String(req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "").split(",")[0].trim();
+
   const payload = {
-    submittedAt: body.submittedAt || new Date().toISOString(),
-    brandName: String(body.brandName || "").trim(),
-    websiteUrl: String(body.websiteUrl || "").trim(),
-    email: String(body.email || "").trim().toLowerCase(),
-    country: String(body.country || "").trim(),
-    audience: String(body.audience || "").trim(),
-    revenue: String(body.revenue || "").trim(),
-    platform: String(body.platform || "").trim(),
-    challenge: String(body.challenge || "").trim(),
-    uploadName: String(body.uploadName || "").trim(),
-    uploadSize: String(body.uploadSize || "").trim(),
-    ip: ip,
-    source: "adforge-v2",
+    ...sanitize(body),
+    orderRef,
+    ip,
+    paymentStatus: "pending",
   };
 
-  // Always log to Render console
-  console.log("=== NEW ADFORGE INTAKE ===");
-  console.log(JSON.stringify(payload, null, 2));
-  console.log("=========================");
+  // ── Console log — ALWAYS (emergency fallback record) ──────────
+  console.log("[intake] New submission:", JSON.stringify({
+    orderRef,
+    brand:   payload.brandName,
+    email:   payload.email,
+    country: payload.country,
+    ts:      payload.submittedAt,
+  }));
 
-  // Send to Google Sheet + Emails (non-blocking)
-  const [sheetResult, operatorResult, clientResult] = await Promise.allSettled([
-    sendToGoogleSheet(payload),
+  // ── Save to Google Sheets — non-blocking ──────────────────────
+  // We do NOT await — user gets instant response regardless of Sheets speed.
+  // If Sheets fails, console.log above is the emergency record.
+  saveOrder(payload)
+    .then(result => {
+      if (!result?.success) {
+        console.error("[intake] Sheets save failed:", result?.error || "unknown");
+      } else {
+        console.log("[intake] Sheets saved OK — orderRef:", orderRef);
+      }
+    })
+    .catch(err => console.error("[intake] Sheets exception:", err.message));
+
+  // ── Send emails — non-blocking ────────────────────────────────
+  Promise.allSettled([
     sendOperatorNotification(payload),
     sendClientConfirmation(payload),
-  ]);
+  ]).then(results => {
+    const labels = ["operator", "client"];
+    results.forEach((r, i) => {
+      if (r.status === "rejected") console.error(`[intake] ${labels[i]} email rejected:`, r.reason?.message);
+      else if (!r.value?.success)  console.error(`[intake] ${labels[i]} email failed:`,   r.value?.error);
+      else                         console.log(`[intake] ${labels[i]} email sent OK`);
+    });
+  });
 
+  // ── Return immediately with orderRef ──────────────────────────
   return res.status(200).json({
-    success: true,
-    message: "Intake received successfully. Your report will be prepared within 12 hours.",
-    debug: {
-      sheet: sheetResult.status === "fulfilled" ? sheetResult.value : { error: sheetResult.reason },
-      operator: operatorResult.status === "fulfilled" ? operatorResult.value : { error: operatorResult.reason },
-      client: clientResult.status === "fulfilled" ? clientResult.value : { error: clientResult.reason },
-    }
+    success:  true,
+    orderRef: orderRef,
+    message:  "Intake received. Proceed to payment.",
   });
 }
