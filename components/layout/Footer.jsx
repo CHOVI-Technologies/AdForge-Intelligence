@@ -1,39 +1,50 @@
-import { BRAND, LINKS, COLORS } from "../../lib/constants";
+// components/layout/Footer.jsx
+import Link from "next/link";
 import { Icons } from "../ui/Icons";
+import { C, BRAND } from "../../lib/constants";
 
 export default function Footer() {
   const year = new Date().getFullYear();
-
   return (
-    <footer style={{
-      borderTop: "1px solid rgba(255,255,255,0.06)",
-      background: "rgba(255,255,255,0.01)",
-      padding: "40px 24px",
-    }}>
-      <div className="container">
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 24 }}>
-
-          {/* Brand */}
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 8 }}>
-              <div style={{ width: 28, height: 28, borderRadius: 6, background: "linear-gradient(135deg,#00B896,#0066CC)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <Icons.BarChart size={14} color="#fff" />
-              </div>
-              <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 16, fontWeight: 800, color: COLORS.text }}>
-                {BRAND.shortName} Intelligence
-              </span>
+    <footer style={{ borderTop: `1px solid ${C.border}`, background: "rgba(255,255,255,0.01)", padding: "36px 20px" }}>
+      <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 18, marginBottom: 24 }}>
+          <Link href="/" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}>
+            <div style={{ width: 26, height: 26, borderRadius: 6, background: C.grad, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <Icons.BarChart size={13} color="#fff" />
             </div>
-            <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: COLORS.textDim }}>
-              Precision market intelligence for DTC brands.
-            </p>
+            <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 14, fontWeight: 800, color: C.text }}>AdForge Intelligence</span>
+          </Link>
+          <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+            {[["/#how-it-works","How It Works"],["/#deliverables","Deliverables"],["/#guarantee","Guarantee"],["mailto:"+BRAND.email,"Contact"]].map(([href,label]) => (
+              <a key={label} href={href} style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: C.dim, textDecoration: "none", transition: "color .2s" }}
+                onMouseEnter={e=>e.target.style.color=C.teal} onMouseLeave={e=>e.target.style.color=C.dim}>
+                {label}
+              </a>
+            ))}
           </div>
-
-          {/* Links */}
-          <div style={{ display: "flex", gap: 28, flexWrap: "wrap" }}>
-            {[
-              { label: "How It Works", href: "/#how-it-works" },
-              { label: "Deliverables",  href: "/#deliverables" },
-              { label: "Guarantee",     href: "/#guarantee" },
+          <div style={{ display: "flex", gap: 14 }}>
+            <a href={`mailto:${BRAND.email}`} title="Email support" style={{ color: C.dim, transition: "color .2s" }}
+              onMouseEnter={e=>e.currentTarget.style.color=C.teal} onMouseLeave={e=>e.currentTarget.style.color=C.dim}>
+              <Icons.Mail size={17} />
+            </a>
+            <a href={BRAND.whatsapp} target="_blank" rel="noopener noreferrer" title="WhatsApp" style={{ color: C.dim, transition: "color .2s" }}
+              onMouseEnter={e=>e.currentTarget.style.color="#25D366"} onMouseLeave={e=>e.currentTarget.style.color=C.dim}>
+              <Icons.Msg size={17} />
+            </a>
+          </div>
+        </div>
+        <div style={{ paddingTop: 20, borderTop: `1px solid rgba(255,255,255,0.04)`, display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+          <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, color: C.dim }}>© {year} AdForge Intelligence. All rights reserved.</p>
+          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <Icons.Lock size={11} color={C.dim} />
+            <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, color: C.dim }}>Payments by Flutterwave</span>
+          </div>
+        </div>
+      </div>
+    </footer>
+  );
+}
               { label: `Contact`,       href: `mailto:${BRAND.email}` },
             ].map(({ label, href }) => (
               <a key={label} href={href} style={{
