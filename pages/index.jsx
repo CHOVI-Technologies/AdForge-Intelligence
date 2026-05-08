@@ -1,164 +1,153 @@
+// pages/index.jsx
 import Head from "next/head";
+import { useState } from "react";
+import { useRouter } from "next/router";
 import Navbar from "../components/layout/Navbar";
 import Footer from "../components/layout/Footer";
 import FadeIn from "../components/ui/FadeIn";
-import Button from "../components/ui/Button";
 import { Icons } from "../components/ui/Icons";
-import { BRAND, LINKS, PRICE, COPY, COLORS } from "../lib/constants";
-import { useState } from "react";
+import { useAuth } from "../context/AuthContext";
+import { C, COPY, BRAND, PRICE } from "../lib/constants";
 
-// ── Design tokens ──────────────────────────────────────────────
-const C = COLORS;
-const s = { // section padding
-  section: { padding: "96px 0" },
-  sectionAlt: { padding: "96px 0", background: "rgba(255,255,255,0.012)" },
-};
+// ── Shared ────────────────────────────────────────────────────────
+const GT = ({ children, gold }) => (
+  <span style={{ background: gold ? C.gradGold : C.grad, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+    {children}
+  </span>
+);
+const SL = ({ children }) => (
+  <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase", color: C.teal, display: "block", marginBottom: 14 }}>
+    {children}
+  </span>
+);
 
-// ── Shared UI ──────────────────────────────────────────────────
-function SectionLabel({ children }) {
-  return <span className="section-label">{children}</span>;
+// ── CTA Hook ──────────────────────────────────────────────────────
+function useCtaClick() {
+  const { isLoggedIn, openAuth } = useAuth();
+  const router = useRouter();
+
+  return () => {
+    if (isLoggedIn) router.push("/intake");
+    else openAuth("signup", () => router.push("/intake"));
+  };
 }
 
-function GradientText({ children, gold = false }) {
+// ── CTA Button ────────────────────────────────────────────────────
+function CTAButton({ size = "md", fullWidth = false }) {
+  const [hov, setHov] = useState(false);
+  const onClick = useCtaClick();
+  const pad = size === "lg" ? "15px 38px" : "12px 28px";
+  const fs  = size === "lg" ? 17 : 15;
+
   return (
-    <span style={{
-      background: gold
-        ? "linear-gradient(135deg, #C9A84C 0%, #E8C876 100%)"
-        : "linear-gradient(135deg, #00B896 0%, #0066CC 100%)",
-      WebkitBackgroundClip: "text",
-      WebkitTextFillColor: "transparent",
-    }}>
-      {children}
-    </span>
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 10,
+        padding: pad, borderRadius: 11, border: "none",
+        background: C.grad, color: "#fff",
+        fontFamily: "'DM Sans',sans-serif", fontSize: fs, fontWeight: 700,
+        letterSpacing: "-0.01em", cursor: "pointer",
+        boxShadow: hov ? "0 0 52px rgba(0,184,150,.38),0 8px 28px rgba(0,102,204,.28)" : "0 0 36px rgba(0,184,150,.25),0 4px 18px rgba(0,102,204,.18)",
+        transform: hov ? "translateY(-1px)" : "translateY(0)",
+        transition: "all .22s ease",
+        width: fullWidth ? "100%" : "auto",
+        justifyContent: fullWidth ? "center" : "flex-start",
+      }}
+    >
+      {COPY.hero.cta}
+      <Icons.Arrow size={15} color="#fff" />
+    </button>
   );
 }
 
-function Divider() {
-  return <div style={{ height: 1, background: "rgba(255,255,255,0.06)", margin: "0" }} />;
-}
+// ════════════════════════════════════════════════════════════════════
+// SECTIONS
+// ════════════════════════════════════════════════════════════════════
 
-// ── Hero ────────────────────────────────────────────────────────
 function Hero() {
   return (
-    <section style={{ minHeight: "88vh", display: "flex", alignItems: "center", position: "relative", overflow: "hidden", padding: "60px 0 80px" }}>
-      {/* Orb glows */}
-      <div style={{ position: "absolute", top: "5%", left: "-5%", width: 700, height: 700, borderRadius: "50%", background: "radial-gradient(circle, rgba(0,184,150,0.08) 0%, transparent 65%)", pointerEvents: "none" }} />
-      <div style={{ position: "absolute", bottom: "0%", right: "-8%", width: 800, height: 800, borderRadius: "50%", background: "radial-gradient(circle, rgba(0,102,204,0.07) 0%, transparent 65%)", pointerEvents: "none" }} />
-      {/* Grid */}
-      <div style={{ position: "absolute", inset: 0, backgroundImage: "linear-gradient(rgba(255,255,255,0.018) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.018) 1px, transparent 1px)", backgroundSize: "64px 64px", pointerEvents: "none", maskImage: "radial-gradient(ellipse at center, black 40%, transparent 80%)" }} />
+    <section style={{ minHeight: "90vh", display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden", padding: "60px 20px 80px", textAlign: "center" }}>
+      <div style={{ position: "absolute", top: "5%", left: "-5%", width: 600, height: 600, borderRadius: "50%", background: "radial-gradient(circle,rgba(0,184,150,.09) 0%,transparent 65%)", pointerEvents: "none" }} />
+      <div style={{ position: "absolute", bottom: "0%", right: "-8%", width: 700, height: 700, borderRadius: "50%", background: "radial-gradient(circle,rgba(0,102,204,.07) 0%,transparent 65%)", pointerEvents: "none" }} />
+      <div style={{ position: "absolute", inset: 0, backgroundImage: "linear-gradient(rgba(255,255,255,.018) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.018) 1px,transparent 1px)", backgroundSize: "60px 60px", pointerEvents: "none", maskImage: "radial-gradient(ellipse at center,black 40%,transparent 80%)" }} />
 
-      <div className="container" style={{ position: "relative", zIndex: 1 }}>
-        <div style={{ maxWidth: 860, margin: "0 auto", textAlign: "center" }}>
+      <div style={{ maxWidth: 840, position: "relative", zIndex: 1, animation: "fadeUp .65s ease both" }}>
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 9, padding: "8px 18px", borderRadius: 100, border: "1px solid rgba(201,168,76,.3)", background: "rgba(201,168,76,.07)", marginBottom: 36 }}>
+          <span style={{ width: 7, height: 7, borderRadius: "50%", background: C.gold, boxShadow: `0 0 8px ${C.gold}`, display: "inline-block", animation: "pulse 2.5s infinite" }} />
+          <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: ".09em", color: C.gold }}>{COPY.hero.badge}</span>
+        </div>
 
-          {/* Badge */}
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 9, padding: "8px 18px", borderRadius: 100, border: "1px solid rgba(201,168,76,0.3)", background: "rgba(201,168,76,0.07)", marginBottom: 40, animation: "fadeDown 0.55s ease both" }}>
-            <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#C9A84C", boxShadow: "0 0 8px #C9A84C", animation: "scalePulse 2.5s infinite", display: "inline-block", flexShrink: 0 }} />
-            <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, fontWeight: 700, letterSpacing: "0.09em", color: "#C9A84C" }}>
-              {COPY.hero.badge}
-            </span>
+        <h1 style={{ fontFamily: "'Playfair Display',serif", fontSize: "clamp(36px,6vw,68px)", fontWeight: 900, lineHeight: 1.06, letterSpacing: "-.03em", color: C.text, marginBottom: 24 }}>
+          The Strategic Intelligence Behind<br />
+          <GT>Top-Performing Ads</GT> in Your Market.
+        </h1>
+
+        <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: "clamp(15px,2vw,18px)", color: C.muted, lineHeight: 1.82, maxWidth: 600, margin: "0 auto 44px" }}>
+          {COPY.hero.sub}
+        </p>
+
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
+          <CTAButton size="lg" />
+          <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+            <Icons.Lock size={12} color={C.dim} />
+            <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, color: C.dim }}>{COPY.hero.trust}</span>
           </div>
+        </div>
 
-          {/* Headline */}
-          <h1 style={{
-            fontFamily: "'Playfair Display', serif",
-            fontSize: "clamp(40px, 6.5vw, 72px)",
-            fontWeight: 900,
-            lineHeight: 1.06,
-            letterSpacing: "-0.03em",
-            color: C.text,
-            marginBottom: 28,
-            animation: "fadeUp 0.65s ease 0.1s both",
-          }}>
-            The Strategic Intelligence Behind<br />
-            <GradientText>Top-Performing Ads</GradientText> in Your Market.
-          </h1>
-
-          {/* Subheadline */}
-          <p style={{
-            fontFamily: "'DM Sans', sans-serif",
-            fontSize: "clamp(16px, 2.2vw, 19px)",
-            color: C.textMuted,
-            lineHeigkht: 1.8,
-            maxWidth: 620,
-            margin: "0 auto 52px",
-            animation: "fadeUp 0.65s ease 0.2s both",
-          }}>
-            {COPY.hero.sub}
-          </p>
-
-          {/* CTA group */}
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, animation: "fadeUp 0.65s ease 0.3s both" }}>
-            <Button size="lg" href={LINKS.intake} />
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <Icons.Lock size={13} color={C.textDim} />
-              <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, color: C.textDim }}>{COPY.hero.trust}</span>
+        <div style={{ display: "flex", justifyContent: "center", gap: 48, marginTop: 64, flexWrap: "wrap" }}>
+          {[["12hr","Delivery Commitment"],[PRICE.display,"Flat Rate"],["100%","Refund Guarantee"]].map(([v,l]) => (
+            <div key={v} style={{ textAlign: "center" }}>
+              <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 28, fontWeight: 900, background: C.grad, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>{v}</div>
+              <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, color: C.dim, marginTop: 4, letterSpacing: ".04em" }}>{l}</div>
             </div>
-          </div>
-
-          {/* Stats */}
-          <div style={{ display: "flex", justifyContent: "center", gap: 56, marginTop: 72, flexWrap: "wrap", animation: "fadeUp 0.65s ease 0.4s both" }}>
-            {[["12hr", "Delivery Commitment"], [PRICE.display, "Flat Rate"], ["100%", "Refund Guarantee"]].map(([val, label]) => (
-              <div key={val} style={{ textAlign: "center" }}>
-                <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 30, fontWeight: 900, background: "linear-gradient(135deg,#00B896,#0066CC)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-                  {val}
-                </div>
-                <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, color: C.textDim, marginTop: 4, letterSpacing: "0.04em" }}>{label}</div>
-              </div>
-            ))}
-          </div>
+          ))}
         </div>
       </div>
     </section>
   );
 }
 
-// ── Social Proof Bar ────────────────────────────────────────────
 function ProofBar() {
   return (
-    <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.018)", padding: "18px 0" }}>
-      <div className="container" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, flexWrap: "wrap" }}>
-        <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: "0.09em", color: C.textDim }}>
-          {COPY.proof.label.toUpperCase()}
-        </span>
-        {COPY.proof.categories.map(cat => (
-          <span key={cat} style={{ padding: "4px 13px", borderRadius: 100, border: "1px solid rgba(255,255,255,0.09)", fontFamily: "'DM Sans',sans-serif", fontSize: 11, color: "rgba(240,242,255,0.45)", fontWeight: 600 }}>
-            {cat}
-          </span>
-        ))}
-      </div>
+    <div style={{ borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, background: "rgba(255,255,255,.018)", padding: "16px 20px", display: "flex", justifyContent: "center", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
+      <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: ".09em", color: C.dim }}>TRUSTED BY DTC BRANDS IN</span>
+      {["Skincare","Supplements","Apparel","Home Goods","Fitness","Tech"].map(c => (
+        <span key={c} style={{ padding: "4px 13px", borderRadius: 100, border: `1px solid rgba(255,255,255,.09)`, fontFamily: "'DM Sans',sans-serif", fontSize: 11, color: "rgba(240,242,255,.45)", fontWeight: 600 }}>{c}</span>
+      ))}
     </div>
   );
 }
 
-// ── Pain Section ────────────────────────────────────────────────
-function PainSection() {
+function Pain() {
+  const items = [
+    { icon: <Icons.TrendUp size={22} color={C.teal} />, title: "Performance erosion is systematic", body: "Ad fatigue is predictable. What converted last quarter rarely converts today. Without fresh market signals, ROAS declines are inevitable — not accidental." },
+    { icon: <Icons.Clock    size={22} color={C.teal} />, title: "Research requires bandwidth you don't have", body: "Competitive intelligence at the depth required to extract actionable insights takes 40+ hours per month. Most teams are already at capacity." },
+    { icon: <Icons.Target   size={22} color={C.teal} />, title: "Creative decisions lack market evidence", body: "Launching new creative without intelligence is expensive experimentation. The performance data you need already exists in your competitors' campaigns." },
+  ];
   return (
-    <section style={s.section}>
-      <div className="container">
-        <FadeIn>
-          <div style={{ textAlign: "center", maxWidth: 620, margin: "0 auto 64px" }}>
-            <SectionLabel>The Problem</SectionLabel>
-            <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: "clamp(30px,4.5vw,50px)", fontWeight: 800, color: C.text, letterSpacing: "-0.025em", lineHeight: 1.12, marginBottom: 18 }}>
-              {COPY.pain.headline}
-            </h2>
-            <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 16, color: C.textMuted, lineHeight: 1.75 }}>
-              {COPY.pain.sub}
-            </p>
-          </div>
+    <section style={{ padding: "92px 20px" }}>
+      <div style={{ maxWidth: 1060, margin: "0 auto" }}>
+        <FadeIn style={{ textAlign: "center", maxWidth: 580, margin: "0 auto 56px" }}>
+          <SL>The Problem</SL>
+          <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: "clamp(28px,4vw,46px)", fontWeight: 800, color: C.text, letterSpacing: "-.025em", lineHeight: 1.12, marginBottom: 16 }}>
+            The cost of guessing is compounding.
+          </h2>
+          <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 15, color: C.muted, lineHeight: 1.8 }}>
+            Every day campaigns run without fresh market intelligence, spend efficiency erodes.
+          </p>
         </FadeIn>
-        <div className="grid-3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 22 }}>
-          {COPY.pain.items.map(({ title, body }, i) => (
-            <FadeIn key={title} delay={i * 0.1}>
-              <div className="card" style={{ padding: "32px 28px", borderRadius: 16, height: "100%" }}>
-                <div style={{ width: 46, height: 46, borderRadius: 12, background: C.tealDim, border: "1px solid rgba(0,184,150,0.2)", display: "flex", alignItems: "center", justifyContent: "center", color: C.teal, marginBottom: 20 }}>
-                  {i === 0 ? <Icons.TrendingUp size={22} /> : i === 1 ? <Icons.Clock size={22} /> : <Icons.Target size={22} />}
-                </div>
-                <h3 style={{ fontFamily: "'Playfair Display',serif", fontSize: 20, fontWeight: 700, color: C.text, marginBottom: 12, lineHeight: 1.25 }}>
-                  {title}
-                </h3>
-                <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, color: C.textMuted, lineHeight: 1.8 }}>
-                  {body}
-                </p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: 20 }}>
+          {items.map(({ icon, title, body }, i) => (
+            <FadeIn key={title} delay={i * .1}>
+              <div style={{ padding: "28px 24px", borderRadius: 15, border: `1px solid ${C.border}`, background: "rgba(255,255,255,.02)", height: "100%", transition: "border-color .3s" }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = "rgba(0,184,150,.22)"}
+                onMouseLeave={e => e.currentTarget.style.borderColor = C.border}>
+                <div style={{ width: 44, height: 44, borderRadius: 11, background: C.tealDim, border: "1px solid rgba(0,184,150,.2)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 18 }}>{icon}</div>
+                <h3 style={{ fontFamily: "'Playfair Display',serif", fontSize: 19, fontWeight: 700, color: C.text, marginBottom: 11, lineHeight: 1.25 }}>{title}</h3>
+                <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, color: C.muted, lineHeight: 1.82 }}>{body}</p>
               </div>
             </FadeIn>
           ))}
@@ -168,41 +157,30 @@ function PainSection() {
   );
 }
 
-// ── How It Works ────────────────────────────────────────────────
 function HowItWorks() {
-  const stepIcons = [<Icons.Globe key={0} />, <Icons.Search key={1} />, <Icons.Zap key={2} />];
+  const steps = [
+    { n:"01", icon: <Icons.User   size={22} color={C.teal} />, title: "Create your account", body: "Sign up in seconds — name, email, password. Your account is your dashboard to commission reports and track deliveries." },
+    { n:"02", icon: <Icons.FileText size={22} color={C.teal} />, title: "Submit brand details", body: "Complete a 3-step intake form with your brand, competitors, and campaign goals. Takes under 5 minutes." },
+    { n:"03", icon: <Icons.Zap    size={22} color={C.teal} />, title: "Receive your intelligence brief", body: "Within 12 hours, a structured PDF arrives — 5 competitor analyses, rewritten creative directions, and homepage angles." },
+  ];
   return (
-    <section id="how-it-works" style={{ ...s.sectionAlt }}>
-      <div className="container">
-        <FadeIn>
-          <div style={{ textAlign: "center", maxWidth: 560, margin: "0 auto 72px" }}>
-            <SectionLabel>The Process</SectionLabel>
-            <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: "clamp(30px,4.5vw,50px)", fontWeight: 800, color: C.text, letterSpacing: "-0.025em", lineHeight: 1.12 }}>
-              {COPY.howItWorks.headline}
-            </h2>
-            <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 16, color: C.textMuted, lineHeight: 1.75, marginTop: 16 }}>
-              {COPY.howItWorks.sub}
-            </p>
-          </div>
+    <section id="how-it-works" style={{ padding: "92px 20px", background: "rgba(255,255,255,.012)" }}>
+      <div style={{ maxWidth: 1060, margin: "0 auto" }}>
+        <FadeIn style={{ textAlign: "center", maxWidth: 520, margin: "0 auto 60px" }}>
+          <SL>The Process</SL>
+          <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: "clamp(28px,4vw,46px)", fontWeight: 800, color: C.text, letterSpacing: "-.025em", lineHeight: 1.12 }}>
+            Three steps. Twelve hours.
+          </h2>
         </FadeIn>
-        <div className="grid-3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 24, position: "relative" }}>
-          {COPY.howItWorks.steps.map(({ n, title, body }, i) => (
-            <FadeIn key={n} delay={i * 0.12}>
-              <div style={{ padding: "36px 28px", borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: C.bgSurface, textAlign: "center", position: "relative", overflow: "hidden" }}>
-                {/* Step number watermark */}
-                <div style={{ position: "absolute", top: 16, right: 20, fontFamily: "'Playfair Display',serif", fontSize: 52, fontWeight: 900, color: "rgba(255,255,255,0.03)", lineHeight: 1, userSelect: "none" }}>
-                  {n}
-                </div>
-                {/* Step badge */}
-                <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg,#C9A84C,#E8C876)", fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: 800, color: "#06081A", marginBottom: 22 }}>
-                  {i + 1}
-                </div>
-                {/* Icon */}
-                <div style={{ width: 54, height: 54, borderRadius: 14, background: C.tealDim, border: "1px solid rgba(0,184,150,0.2)", display: "flex", alignItems: "center", justifyContent: "center", color: C.teal, margin: "0 auto 22px" }}>
-                  {stepIcons[i]}
-                </div>
-                <h3 style={{ fontFamily: "'Playfair Display',serif", fontSize: 20, fontWeight: 700, color: C.text, marginBottom: 12 }}>{title}</h3>
-                <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, color: C.textMuted, lineHeight: 1.8 }}>{body}</p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 22 }}>
+          {steps.map(({ n, icon, title, body }, i) => (
+            <FadeIn key={n} delay={i * .1}>
+              <div style={{ padding: "32px 24px", borderRadius: 17, border: `1px solid ${C.border}`, background: C.surface, textAlign: "center", position: "relative", overflow: "hidden" }}>
+                <div style={{ position: "absolute", top: 14, right: 18, fontFamily: "'Playfair Display',serif", fontSize: 52, fontWeight: 900, color: "rgba(255,255,255,.03)", lineHeight: 1, userSelect: "none" }}>{n}</div>
+                <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 24, height: 24, borderRadius: "50%", background: C.gradGold, fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: 800, color: "#06081A", marginBottom: 18 }}>{i + 1}</div>
+                <div style={{ width: 52, height: 52, borderRadius: 13, background: C.tealDim, border: "1px solid rgba(0,184,150,.2)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 18px" }}>{icon}</div>
+                <h3 style={{ fontFamily: "'Playfair Display',serif", fontSize: 19, fontWeight: 700, color: C.text, marginBottom: 11 }}>{title}</h3>
+                <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, color: C.muted, lineHeight: 1.82 }}>{body}</p>
               </div>
             </FadeIn>
           ))}
@@ -212,50 +190,48 @@ function HowItWorks() {
   );
 }
 
-// ── Deliverables ────────────────────────────────────────────────
 function Deliverables() {
-  const icons = [<Icons.Search />, <Icons.FileText />, <Icons.Pencil />, <Icons.Globe />];
+  const items = [
+    { icon: <Icons.Search   size={20} color={C.teal} />, title: "5 High-Performance Campaign Analyses", body: "Campaigns with 30+ days of sustained spend — the most reliable public indicator of ROI — fully documented with structural composition and positioning." },
+    { icon: <Icons.FileText size={20} color={C.teal} />, title: "Messaging Framework Deconstruction", body: "Hook mechanism, emotional driver, offer framing, and specific audience signal activated. Insight, not just observation." },
+    { icon: <Icons.Pencil   size={20} color={C.teal} />, title: "5 Brand-Adapted Creative Directions", body: "Each framework translated into a ready-to-brief creative direction, calibrated to your brand voice, product, and audience." },
+    { icon: <Icons.Globe    size={20} color={C.teal} />, title: "Conversion-Optimised Landing Page Angles", body: "Five headline frameworks derived from the highest-performing messaging patterns active in your specific category." },
+  ];
   return (
-    <section id="deliverables" style={s.section}>
-      <div className="container">
-        <FadeIn>
-          <div style={{ textAlign: "center", maxWidth: 580, margin: "0 auto 68px" }}>
-            <SectionLabel>What You Receive</SectionLabel>
-            <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: "clamp(30px,4.5vw,50px)", fontWeight: 800, color: C.text, letterSpacing: "-0.025em", lineHeight: 1.12, marginBottom: 16 }}>
-              {COPY.deliverables.headline}
-            </h2>
-            <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 16, color: C.textMuted, lineHeight: 1.75 }}>
-              {COPY.deliverables.sub}
-            </p>
-          </div>
+    <section id="deliverables" style={{ padding: "92px 20px" }}>
+      <div style={{ maxWidth: 1060, margin: "0 auto" }}>
+        <FadeIn style={{ textAlign: "center", maxWidth: 560, margin: "0 auto 56px" }}>
+          <SL>What You Receive</SL>
+          <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: "clamp(28px,4vw,46px)", fontWeight: 800, color: C.text, letterSpacing: "-.025em", lineHeight: 1.12, marginBottom: 14 }}>
+            Everything in your intelligence brief.
+          </h2>
+          <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 15, color: C.muted, lineHeight: 1.8 }}>A complete strategic brief. Market-specific intelligence built for your brand.</p>
         </FadeIn>
-        <div className="grid-2" style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 20, marginBottom: 40 }}>
-          {COPY.deliverables.items.map(({ title, body }, i) => (
-            <FadeIn key={title} delay={i * 0.08}>
-              <div className="card" style={{ display: "flex", gap: 18, padding: "28px 28px", borderRadius: 15 }}>
-                <div style={{ flexShrink: 0, width: 46, height: 46, borderRadius: 12, background: C.tealDim, border: "1px solid rgba(0,184,150,0.2)", display: "flex", alignItems: "center", justifyContent: "center", color: C.teal }}>
-                  {icons[i]}
-                </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(440px,1fr))", gap: 18, marginBottom: 32 }}>
+          {items.map(({ icon, title, body }, i) => (
+            <FadeIn key={title} delay={i * .08}>
+              <div style={{ display: "flex", gap: 16, padding: "24px", borderRadius: 14, border: `1px solid ${C.border}`, background: "rgba(255,255,255,.02)", transition: "border-color .3s" }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = "rgba(0,184,150,.2)"}
+                onMouseLeave={e => e.currentTarget.style.borderColor = C.border}>
+                <div style={{ flexShrink: 0, width: 42, height: 42, borderRadius: 10, background: C.tealDim, border: "1px solid rgba(0,184,150,.2)", display: "flex", alignItems: "center", justifyContent: "center" }}>{icon}</div>
                 <div>
-                  <h3 style={{ fontFamily: "'Playfair Display',serif", fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 10, lineHeight: 1.25 }}>{title}</h3>
-                  <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, color: C.textMuted, lineHeight: 1.8 }}>{body}</p>
+                  <h3 style={{ fontFamily: "'Playfair Display',serif", fontSize: 17, fontWeight: 700, color: C.text, marginBottom: 9, lineHeight: 1.25 }}>{title}</h3>
+                  <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: C.muted, lineHeight: 1.82 }}>{body}</p>
                 </div>
               </div>
             </FadeIn>
           ))}
         </div>
-
-        {/* Value Stack */}
-        <FadeIn delay={0.25}>
-          <div style={{ padding: "28px 36px", borderRadius: 16, border: "1px solid rgba(201,168,76,0.22)", background: "linear-gradient(135deg, rgba(201,168,76,0.04), rgba(0,102,204,0.04))", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 24 }}>
+        <FadeIn delay={.2}>
+          <div style={{ padding: "24px 30px", borderRadius: 14, border: "1px solid rgba(201,168,76,.22)", background: "rgba(201,168,76,.04)", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 20 }}>
             <div>
-              <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, color: C.textDim, letterSpacing: "0.06em", marginBottom: 6 }}>{COPY.deliverables.valueLabel.toUpperCase()}</p>
-              <p style={{ fontFamily: "'Playfair Display',serif", fontSize: 32, fontWeight: 900, color: C.text }}>
-                <span style={{ textDecoration: "line-through", color: C.textDim, fontSize: 20 }}>{COPY.deliverables.valueCrossed} </span>
-                <GradientText gold>{COPY.deliverables.valueReal}</GradientText>
+              <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, color: C.dim, letterSpacing: ".06em", marginBottom: 5 }}>TOTAL VALUE</p>
+              <p style={{ fontFamily: "'Playfair Display',serif", fontSize: 28, fontWeight: 900, color: C.text }}>
+                <span style={{ textDecoration: "line-through", color: C.dim, fontSize: 18 }}>$1,400+ </span>
+                <GT gold>{PRICE.display} flat</GT>
               </p>
             </div>
-            <Button size="md" href={LINKS.intake} />
+            <CTAButton />
           </div>
         </FadeIn>
       </div>
@@ -263,35 +239,30 @@ function Deliverables() {
   );
 }
 
-// ── Testimonials ────────────────────────────────────────────────
 function Testimonials() {
+  const items = [
+    { name: "Marcus T.", role: "Founder, Vitora Supplements", text: "Five frameworks I hadn't identified. We launched two within 48 hours. One outperformed our existing control within the first week. The depth of analysis justified the fee several times over." },
+    { name: "Priya L.", role: "Head of Growth, Lumē Skincare", text: "Delivered in nine hours, not twelve. The campaign deconstructions surfaced angles our agency had completely missed. It changed how we brief creative for our category." },
+    { name: "James O.", role: "CMO, Fortis Apparel", text: "The landing page frameworks alone changed our above-the-fold messaging. Conversion rate increased within the first test cycle. High-signal, low-noise, immediately actionable." },
+  ];
   return (
-    <section style={s.sectionAlt}>
-      <div className="container">
-        <FadeIn>
-          <div style={{ textAlign: "center", marginBottom: 60 }}>
-            <SectionLabel>Client Results</SectionLabel>
-            <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: "clamp(30px,4.5vw,50px)", fontWeight: 800, color: C.text, letterSpacing: "-0.025em", lineHeight: 1.12 }}>
-              {COPY.testimonials.headline}
-            </h2>
-          </div>
+    <section style={{ padding: "92px 20px", background: "rgba(255,255,255,.012)" }}>
+      <div style={{ maxWidth: 1060, margin: "0 auto" }}>
+        <FadeIn style={{ textAlign: "center", marginBottom: 48 }}>
+          <SL>Client Results</SL>
+          <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: "clamp(28px,4vw,46px)", fontWeight: 800, color: C.text, letterSpacing: "-.025em" }}>From operators who've commissioned reports.</h2>
         </FadeIn>
-        <div className="grid-3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 22 }}>
-          {COPY.testimonials.items.map(({ name, role, text, body }, i) => (
-            <FadeIn key={name} delay={i * 0.1}>
-              <div className="card" style={{ padding: "30px", borderRadius: 16, height: "100%" }}>
-                {/* Stars */}
-                <div style={{ display: "flex", gap: 3, marginBottom: 20 }}>
-                  {[...Array(5)].map((_, j) => <Icons.Star key={j} size={14} />)}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: 20 }}>
+          {items.map(({ name, role, text }, i) => (
+            <FadeIn key={name} delay={i * .09}>
+              <div style={{ padding: "26px", borderRadius: 14, border: `1px solid ${C.border}`, background: "rgba(255,255,255,.02)", height: "100%" }}>
+                <div style={{ display: "flex", gap: 2, marginBottom: 16 }}>
+                  {[...Array(5)].map((_, j) => <Icons.Star key={j} size={13} />)}
                 </div>
-                {/* Quote */}
-                <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, color: "rgba(240,242,255,0.72)", lineHeight: 1.85, fontStyle: "italic", marginBottom: 24 }}>
-                  "{text || body}"
-                </p>
-                {/* Attribution */}
-                <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 18 }}>
+                <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, color: "rgba(240,242,255,.72)", lineHeight: 1.88, fontStyle: "italic", marginBottom: 20 }}>"{text}"</p>
+                <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 16 }}>
                   <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, fontWeight: 700, color: C.text }}>{name}</p>
-                  <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, color: C.textDim, marginTop: 3 }}>{role}</p>
+                  <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, color: C.dim, marginTop: 3 }}>{role}</p>
                 </div>
               </div>
             </FadeIn>
@@ -302,95 +273,61 @@ function Testimonials() {
   );
 }
 
-// ── Guarantee ───────────────────────────────────────────────────
 function Guarantee() {
   return (
-    <section id="guarantee" style={s.section}>
-      <div className="container">
-        <div style={{ maxWidth: 740, margin: "0 auto" }}>
-          <FadeIn>
-            <div style={{ padding: "60px 52px", borderRadius: 24, border: "1px solid rgba(0,184,150,0.22)", background: "linear-gradient(135deg, rgba(0,184,150,0.05), rgba(0,102,204,0.05))", textAlign: "center", position: "relative", overflow: "hidden" }}>
-              <div style={{ position: "absolute", top: -60, right: -60, width: 220, height: 220, borderRadius: "50%", background: "radial-gradient(circle, rgba(0,184,150,0.08), transparent)", pointerEvents: "none" }} />
-              {/* Icon */}
-              <div style={{ width: 68, height: 68, borderRadius: "50%", background: C.tealDim, border: "1px solid rgba(0,184,150,0.28)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 28px", color: C.teal }}>
-                <Icons.Shield size={28} />
-              </div>
-              <SectionLabel>Performance Guarantee</SectionLabel>
-              <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: "clamp(26px,4vw,40px)", fontWeight: 800, color: C.text, letterSpacing: "-0.025em", lineHeight: 1.12, marginBottom: 20 }}>
-                {COPY.guarantee.headline}
-              </h2>
-              <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 16, color: C.textMuted, lineHeight: 1.85, maxWidth: 520, margin: "0 auto 36px" }}>
-                {COPY.guarantee.body}
-              </p>
-              <div style={{ display: "flex", justifyContent: "center", gap: 28, flexWrap: "wrap", marginBottom: 40 }}>
-                {COPY.guarantee.items.map(item => (
-                  <div key={item} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ color: C.teal }}><Icons.Check size={16} /></span>
-                    <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, color: C.textMuted }}>{item}</span>
-                  </div>
-                ))}
-              </div>
-              <Button size="md" href={LINKS.intake} />
+    <section id="guarantee" style={{ padding: "92px 20px" }}>
+      <div style={{ maxWidth: 720, margin: "0 auto" }}>
+        <FadeIn>
+          <div style={{ padding: "52px 36px", borderRadius: 22, border: "1px solid rgba(0,184,150,.22)", background: "linear-gradient(135deg,rgba(0,184,150,.05),rgba(0,102,204,.05))", textAlign: "center", position: "relative", overflow: "hidden" }}>
+            <div style={{ width: 62, height: 62, borderRadius: "50%", background: C.tealDim, border: "1px solid rgba(0,184,150,.28)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 22px", color: C.teal }}>
+              <Icons.Shield size={26} color={C.teal} />
             </div>
-          </FadeIn>
-        </div>
+            <SL>Performance Guarantee</SL>
+            <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: "clamp(24px,3.5vw,38px)", fontWeight: 800, color: C.text, letterSpacing: "-.025em", lineHeight: 1.12, marginBottom: 18 }}>{COPY.guarantee.headline}</h2>
+            <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 15, color: C.muted, lineHeight: 1.85, maxWidth: 500, margin: "0 auto 30px" }}>{COPY.guarantee.body}</p>
+            <div style={{ display: "flex", justifyContent: "center", gap: 22, flexWrap: "wrap", marginBottom: 34 }}>
+              {["12-hour delivery commitment","Full refund if standards aren't met","No partial credits — 100% returned"].map(item => (
+                <div key={item} style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                  <Icons.Check size={14} color={C.teal} />
+                  <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: C.muted }}>{item}</span>
+                </div>
+              ))}
+            </div>
+            <CTAButton />
+          </div>
+        </FadeIn>
       </div>
     </section>
   );
 }
 
-// ── Scarcity ─────────────────────────────────────────────────────
-function Scarcity() {
-  return (
-    <div style={{ padding: "0 0 56px" }}>
-      <div className="container">
-        <FadeIn>
-          <div style={{ padding: "18px 28px", borderRadius: 12, border: "1px solid rgba(201,168,76,0.2)", background: "rgba(201,168,76,0.04)", display: "flex", alignItems: "flex-start", gap: 14 }}>
-            <Icons.Sparkles size={18} color="#C9A84C" style={{ flexShrink: 0, marginTop: 1 }} />
-            <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, color: C.textMuted, lineHeight: 1.7 }}>
-              <strong style={{ color: C.text, fontWeight: 700 }}>Note on availability: </strong>
-              {COPY.scarcity.text}
-            </p>
-          </div>
-        </FadeIn>
-      </div>
-    </div>
-  );
-}
-
-// ── FAQ ────────────────────────────────────────────────────────
 function FAQ() {
   const [open, setOpen] = useState(null);
+  const faqs = [
+    ["What qualifies as a 'high-performing' campaign?","We identify campaigns funded for 30+ days. Sustained spend is the most reliable public indicator of ROI — advertisers don't continue funding campaigns that don't convert."],
+    ["How do you ensure directions are relevant to our brand?","Your intake form provides brand voice, product positioning, and audience profile. Every creative direction is calibrated to these — not generic market outputs."],
+    ["What format does the report arrive in?","A structured PDF brief (20–35 pages), formatted for immediate briefing to your creative team. Organised for action, not just reading."],
+    ["Is this relevant if we're not running ads yet?","Yes. Pre-launch brands use this to enter the market with intelligence rather than assumptions, dramatically reducing initial test spend."],
+    ["What ad platforms do you cover?","Primarily Meta (Facebook/Instagram) and TikTok. Google Display is available for relevant categories. Specify in the intake form."],
+  ];
   return (
-    <section style={s.sectionAlt}>
-      <div className="container">
-        <FadeIn>
-          <div style={{ textAlign: "center", marginBottom: 60 }}>
-            <SectionLabel>FAQ</SectionLabel>
-            <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: "clamp(28px,4vw,46px)", fontWeight: 800, color: C.text, letterSpacing: "-0.025em" }}>
-              Common questions.
-            </h2>
-          </div>
+    <section style={{ padding: "92px 20px", background: "rgba(255,255,255,.012)" }}>
+      <div style={{ maxWidth: 1060, margin: "0 auto" }}>
+        <FadeIn style={{ textAlign: "center", marginBottom: 48 }}>
+          <SL>FAQ</SL>
+          <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: "clamp(26px,4vw,44px)", fontWeight: 800, color: C.text, letterSpacing: "-.025em" }}>Common questions.</h2>
         </FadeIn>
-        <div style={{ maxWidth: 720, margin: "0 auto" }}>
-          {COPY.faq.map(({ q, a }, i) => (
-            <FadeIn key={q} delay={i * 0.05}>
-              <div style={{ borderRadius: 12, border: "1px solid rgba(255,255,255,0.07)", overflow: "hidden", marginBottom: 6 }}>
-                <button onClick={() => setOpen(open === i ? null : i)} style={{
-                  width: "100%", padding: "20px 24px",
-                  background: open === i ? "rgba(0,184,150,0.05)" : "rgba(255,255,255,0.015)",
-                  border: "none", cursor: "pointer",
-                  display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16,
-                  transition: "background 0.2s ease",
-                }}>
+        <div style={{ maxWidth: 700, margin: "0 auto" }}>
+          {faqs.map(([q, a], i) => (
+            <FadeIn key={q} delay={i * .05}>
+              <div style={{ borderRadius: 11, border: `1px solid ${C.border}`, overflow: "hidden", marginBottom: 5 }}>
+                <button onClick={() => setOpen(open === i ? null : i)} style={{ width: "100%", padding: "18px 22px", background: open === i ? "rgba(0,184,150,.05)" : "rgba(255,255,255,.015)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, transition: "background .2s" }}>
                   <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 15, fontWeight: 600, color: C.text, textAlign: "left" }}>{q}</span>
-                  <span style={{ color: C.teal, flexShrink: 0, transition: "transform 0.28s ease", transform: open === i ? "rotate(180deg)" : "rotate(0)" }}>
-                    <Icons.ChevronDown size={18} />
-                  </span>
+                  <span style={{ color: C.teal, flexShrink: 0, transition: "transform .28s", transform: open === i ? "rotate(180deg)" : "rotate(0)" }}><Icons.ChevDown size={18} color={C.teal} /></span>
                 </button>
                 {open === i && (
-                  <div style={{ padding: "0 24px 20px", background: "rgba(0,184,150,0.025)", animation: "fadeDown 0.25s ease" }}>
-                    <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, color: C.textMuted, lineHeight: 1.85 }}>{a}</p>
+                  <div style={{ padding: "0 22px 18px", background: "rgba(0,184,150,.025)" }}>
+                    <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, color: C.muted, lineHeight: 1.85 }}>{a}</p>
                   </div>
                 )}
               </div>
@@ -402,28 +339,22 @@ function FAQ() {
   );
 }
 
-// ── Final CTA ────────────────────────────────────────────────────
 function FinalCTA() {
   return (
-    <section style={s.section}>
-      <div className="container">
+    <section style={{ padding: "92px 20px" }}>
+      <div style={{ maxWidth: 840, margin: "0 auto" }}>
         <FadeIn>
-          <div style={{ maxWidth: 860, margin: "0 auto", padding: "80px 52px", borderRadius: 28, border: "1px solid rgba(255,255,255,0.07)", background: `radial-gradient(ellipse at 50% 0%, rgba(0,184,150,0.09) 0%, transparent 60%), ${C.bgSurface}`, textAlign: "center", position: "relative", overflow: "hidden" }}>
-            <div style={{ position: "absolute", inset: 0, backgroundImage: "linear-gradient(rgba(255,255,255,0.016) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.016) 1px, transparent 1px)", backgroundSize: "40px 40px", pointerEvents: "none" }} />
-            <SectionLabel>Commission Your Report</SectionLabel>
-            <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: "clamp(32px,5.5vw,58px)", fontWeight: 900, color: C.text, letterSpacing: "-0.03em", lineHeight: 1.08, marginBottom: 22, position: "relative" }}>
-              The intelligence your<br />market already contains.<br />
-              <GradientText>Now accessible to you.</GradientText>
+          <div style={{ padding: "72px 36px", borderRadius: 26, border: `1px solid ${C.border}`, background: `radial-gradient(ellipse at 50% 0%,rgba(0,184,150,.09) 0%,transparent 60%),${C.surface}`, textAlign: "center", position: "relative", overflow: "hidden" }}>
+            <div style={{ position: "absolute", inset: 0, backgroundImage: "linear-gradient(rgba(255,255,255,.016) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.016) 1px,transparent 1px)", backgroundSize: "40px 40px", pointerEvents: "none" }} />
+            <SL>Commission Your Report</SL>
+            <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: "clamp(30px,5vw,54px)", fontWeight: 900, color: C.text, letterSpacing: "-.03em", lineHeight: 1.08, marginBottom: 20, position: "relative" }}>
+              The intelligence your<br />market already contains.<br /><GT>Now accessible to you.</GT>
             </h2>
-            <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 17, color: C.textMuted, marginBottom: 44, position: "relative" }}>
-              {PRICE.display} flat · Delivered in {PRICE.delivery} · {PRICE.guarantee}
+            <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 16, color: C.muted, marginBottom: 38, position: "relative" }}>
+              {PRICE.display} flat · Delivered in {PRICE.delivery} · Full performance guarantee
             </p>
-            <div style={{ position: "relative" }}>
-              <Button size="lg" href={LINKS.intake} />
-            </div>
-            <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, color: C.textDim, marginTop: 20, position: "relative" }}>
-              Secure checkout via Flutterwave · Instant confirmation
-            </p>
+            <div style={{ position: "relative" }}><CTAButton size="lg" /></div>
+            <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, color: C.dim, marginTop: 18, position: "relative" }}>Secure checkout via Flutterwave · Instant confirmation</p>
           </div>
         </FadeIn>
       </div>
@@ -431,463 +362,27 @@ function FinalCTA() {
   );
 }
 
-// ── Page ────────────────────────────────────────────────────────
+// ── Page ──────────────────────────────────────────────────────────
 export default function HomePage() {
   return (
     <>
       <Head>
-        <title>{BRAND.name} — Precision Ad Intelligence in 12 Hours</title>
-        <meta name="description" content="We analyze high-performing signals in your market, decode the messaging frameworks driving results, and translate them into tailored creative directions for your brand. Delivered in 12 hours." />
+        <title>AdForge Intelligence — Precision Ad Intelligence in 12 Hours</title>
+        <meta name="description" content="We analyze high-performing signals in your market, decode the messaging frameworks driving results, and deliver tailored creative directions in 12 hours. $397 flat." />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta property="og:title" content={`${BRAND.name} — Strategic Ad Intelligence, 12-Hour Delivery`} />
+        <meta property="og:title" content="AdForge Intelligence — Strategic Ad Intelligence, 12-Hour Delivery" />
         <meta property="og:description" content="Precision market intelligence for DTC brands. $397 flat. Full performance guarantee." />
         <meta property="og:type" content="website" />
         <meta name="twitter:card" content="summary_large_image" />
-        <link rel="icon" href="/favicon.ico" />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </Head>
-
-      <Navbar transparent />
+      <Navbar />
       <Hero />
       <ProofBar />
-      <PainSection />
-      <Divider />
+      <Pain />
       <HowItWorks />
       <Deliverables />
       <Testimonials />
       <Guarantee />
-      <Scarcity />
-      <FAQ />
-      <FinalCTA />
-      <Footer />
-    </>
-  );
-}
-  return <div style={{ height: 1, background: "rgba(255,255,255,0.06)", margin: "0" }} />;
-}
-
-// ── Hero ────────────────────────────────────────────────────────
-function Hero() {
-  return (
-    <section style={{ minHeight: "88vh", display: "flex", alignItems: "center", position: "relative", overflow: "hidden", padding: "60px 0 80px" }}>
-      {/* Orb glows */}
-      <div style={{ position: "absolute", top: "5%", left: "-5%", width: 700, height: 700, borderRadius: "50%", background: "radial-gradient(circle, rgba(0,184,150,0.08) 0%, transparent 65%)", pointerEvents: "none" }} />
-      <div style={{ position: "absolute", bottom: "0%", right: "-8%", width: 800, height: 800, borderRadius: "50%", background: "radial-gradient(circle, rgba(0,102,204,0.07) 0%, transparent 65%)", pointerEvents: "none" }} />
-      {/* Grid */}
-      <div style={{ position: "absolute", inset: 0, backgroundImage: "linear-gradient(rgba(255,255,255,0.018) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.018) 1px, transparent 1px)", backgroundSize: "64px 64px", pointerEvents: "none", maskImage: "radial-gradient(ellipse at center, black 40%, transparent 80%)" }} />
-
-      <div className="container" style={{ position: "relative", zIndex: 1 }}>
-        <div style={{ maxWidth: 860, margin: "0 auto", textAlign: "center" }}>
-
-          {/* Badge */}
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 9, padding: "8px 18px", borderRadius: 100, border: "1px solid rgba(201,168,76,0.3)", background: "rgba(201,168,76,0.07)", marginBottom: 40, animation: "fadeDown 0.55s ease both" }}>
-            <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#C9A84C", boxShadow: "0 0 8px #C9A84C", animation: "scalePulse 2.5s infinite", display: "inline-block", flexShrink: 0 }} />
-            <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, fontWeight: 700, letterSpacing: "0.09em", color: "#C9A84C" }}>
-              {COPY.hero.badge}
-            </span>
-          </div>
-
-          {/* Headline */}
-          <h1 style={{
-            fontFamily: "'Playfair Display', serif",
-            fontSize: "clamp(40px, 6.5vw, 72px)",
-            fontWeight: 900,
-            lineHeight: 1.06,
-            letterSpacing: "-0.03em",
-            color: C.text,
-            marginBottom: 28,
-            animation: "fadeUp 0.65s ease 0.1s both",
-          }}>
-            The Strategic Intelligence Behind<br />
-            <GradientText>Top-Performing Ads</GradientText> in Your Market.
-          </h1>
-
-          {/* Subheadline */}
-          <p style={{
-            fontFamily: "'DM Sans', sans-serif",
-            fontSize: "clamp(16px, 2.2vw, 19px)",
-            color: C.textMuted,
-            lineHeigkht: 1.8,
-            maxWidth: 620,
-            margin: "0 auto 52px",
-            animation: "fadeUp 0.65s ease 0.2s both",
-          }}>
-            {COPY.hero.sub}
-          </p>
-
-          {/* CTA group */}
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, animation: "fadeUp 0.65s ease 0.3s both" }}>
-            <Button size="lg" href={LINKS.intake} />
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <Icons.Lock size={13} color={C.textDim} />
-              <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, color: C.textDim }}>{COPY.hero.trust}</span>
-            </div>
-          </div>
-
-          {/* Stats */}
-          <div style={{ display: "flex", justifyContent: "center", gap: 56, marginTop: 72, flexWrap: "wrap", animation: "fadeUp 0.65s ease 0.4s both" }}>
-            {[["12hr", "Delivery Commitment"], [PRICE.display, "Flat Rate"], ["100%", "Refund Guarantee"]].map(([val, label]) => (
-              <div key={val} style={{ textAlign: "center" }}>
-                <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 30, fontWeight: 900, background: "linear-gradient(135deg,#00B896,#0066CC)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-                  {val}
-                </div>
-                <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, color: C.textDim, marginTop: 4, letterSpacing: "0.04em" }}>{label}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ── Social Proof Bar ────────────────────────────────────────────
-function ProofBar() {
-  return (
-    <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.018)", padding: "18px 0" }}>
-      <div className="container" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, flexWrap: "wrap" }}>
-        <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: "0.09em", color: C.textDim }}>
-          {COPY.proof.label.toUpperCase()}
-        </span>
-        {COPY.proof.categories.map(cat => (
-          <span key={cat} style={{ padding: "4px 13px", borderRadius: 100, border: "1px solid rgba(255,255,255,0.09)", fontFamily: "'DM Sans',sans-serif", fontSize: 11, color: "rgba(240,242,255,0.45)", fontWeight: 600 }}>
-            {cat}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ── Pain Section ────────────────────────────────────────────────
-function PainSection() {
-  return (
-    <section style={s.section}>
-      <div className="container">
-        <FadeIn>
-          <div style={{ textAlign: "center", maxWidth: 620, margin: "0 auto 64px" }}>
-            <SectionLabel>The Problem</SectionLabel>
-            <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: "clamp(30px,4.5vw,50px)", fontWeight: 800, color: C.text, letterSpacing: "-0.025em", lineHeight: 1.12, marginBottom: 18 }}>
-              {COPY.pain.headline}
-            </h2>
-            <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 16, color: C.textMuted, lineHeight: 1.75 }}>
-              {COPY.pain.sub}
-            </p>
-          </div>
-        </FadeIn>
-        <div className="grid-3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 22 }}>
-          {COPY.pain.items.map(({ title, body }, i) => (
-            <FadeIn key={title} delay={i * 0.1}>
-              <div className="card" style={{ padding: "32px 28px", borderRadius: 16, height: "100%" }}>
-                <div style={{ width: 46, height: 46, borderRadius: 12, background: C.tealDim, border: "1px solid rgba(0,184,150,0.2)", display: "flex", alignItems: "center", justifyContent: "center", color: C.teal, marginBottom: 20 }}>
-                  {i === 0 ? <Icons.TrendingUp size={22} /> : i === 1 ? <Icons.Clock size={22} /> : <Icons.Target size={22} />}
-                </div>
-                <h3 style={{ fontFamily: "'Playfair Display',serif", fontSize: 20, fontWeight: 700, color: C.text, marginBottom: 12, lineHeight: 1.25 }}>
-                  {title}
-                </h3>
-                <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, color: C.textMuted, lineHeight: 1.8 }}>
-                  {body}
-                </p>
-              </div>
-            </FadeIn>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ── How It Works ────────────────────────────────────────────────
-function HowItWorks() {
-  const stepIcons = [<Icons.Globe key={0} />, <Icons.Search key={1} />, <Icons.Zap key={2} />];
-  return (
-    <section id="how-it-works" style={{ ...s.sectionAlt }}>
-      <div className="container">
-        <FadeIn>
-          <div style={{ textAlign: "center", maxWidth: 560, margin: "0 auto 72px" }}>
-            <SectionLabel>The Process</SectionLabel>
-            <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: "clamp(30px,4.5vw,50px)", fontWeight: 800, color: C.text, letterSpacing: "-0.025em", lineHeight: 1.12 }}>
-              {COPY.howItWorks.headline}
-            </h2>
-            <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 16, color: C.textMuted, lineHeight: 1.75, marginTop: 16 }}>
-              {COPY.howItWorks.sub}
-            </p>
-          </div>
-        </FadeIn>
-        <div className="grid-3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 24, position: "relative" }}>
-          {COPY.howItWorks.steps.map(({ n, title, body }, i) => (
-            <FadeIn key={n} delay={i * 0.12}>
-              <div style={{ padding: "36px 28px", borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: C.bgSurface, textAlign: "center", position: "relative", overflow: "hidden" }}>
-                {/* Step number watermark */}
-                <div style={{ position: "absolute", top: 16, right: 20, fontFamily: "'Playfair Display',serif", fontSize: 52, fontWeight: 900, color: "rgba(255,255,255,0.03)", lineHeight: 1, userSelect: "none" }}>
-                  {n}
-                </div>
-                {/* Step badge */}
-                <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg,#C9A84C,#E8C876)", fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: 800, color: "#06081A", marginBottom: 22 }}>
-                  {i + 1}
-                </div>
-                {/* Icon */}
-                <div style={{ width: 54, height: 54, borderRadius: 14, background: C.tealDim, border: "1px solid rgba(0,184,150,0.2)", display: "flex", alignItems: "center", justifyContent: "center", color: C.teal, margin: "0 auto 22px" }}>
-                  {stepIcons[i]}
-                </div>
-                <h3 style={{ fontFamily: "'Playfair Display',serif", fontSize: 20, fontWeight: 700, color: C.text, marginBottom: 12 }}>{title}</h3>
-                <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, color: C.textMuted, lineHeight: 1.8 }}>{body}</p>
-              </div>
-            </FadeIn>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ── Deliverables ────────────────────────────────────────────────
-function Deliverables() {
-  const icons = [<Icons.Search />, <Icons.FileText />, <Icons.Pencil />, <Icons.Globe />];
-  return (
-    <section id="deliverables" style={s.section}>
-      <div className="container">
-        <FadeIn>
-          <div style={{ textAlign: "center", maxWidth: 580, margin: "0 auto 68px" }}>
-            <SectionLabel>What You Receive</SectionLabel>
-            <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: "clamp(30px,4.5vw,50px)", fontWeight: 800, color: C.text, letterSpacing: "-0.025em", lineHeight: 1.12, marginBottom: 16 }}>
-              {COPY.deliverables.headline}
-            </h2>
-            <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 16, color: C.textMuted, lineHeight: 1.75 }}>
-              {COPY.deliverables.sub}
-            </p>
-          </div>
-        </FadeIn>
-        <div className="grid-2" style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 20, marginBottom: 40 }}>
-          {COPY.deliverables.items.map(({ title, body }, i) => (
-            <FadeIn key={title} delay={i * 0.08}>
-              <div className="card" style={{ display: "flex", gap: 18, padding: "28px 28px", borderRadius: 15 }}>
-                <div style={{ flexShrink: 0, width: 46, height: 46, borderRadius: 12, background: C.tealDim, border: "1px solid rgba(0,184,150,0.2)", display: "flex", alignItems: "center", justifyContent: "center", color: C.teal }}>
-                  {icons[i]}
-                </div>
-                <div>
-                  <h3 style={{ fontFamily: "'Playfair Display',serif", fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 10, lineHeight: 1.25 }}>{title}</h3>
-                  <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, color: C.textMuted, lineHeight: 1.8 }}>{body}</p>
-                </div>
-              </div>
-            </FadeIn>
-          ))}
-        </div>
-
-        {/* Value Stack */}
-        <FadeIn delay={0.25}>
-          <div style={{ padding: "28px 36px", borderRadius: 16, border: "1px solid rgba(201,168,76,0.22)", background: "linear-gradient(135deg, rgba(201,168,76,0.04), rgba(0,102,204,0.04))", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 24 }}>
-            <div>
-              <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, color: C.textDim, letterSpacing: "0.06em", marginBottom: 6 }}>{COPY.deliverables.valueLabel.toUpperCase()}</p>
-              <p style={{ fontFamily: "'Playfair Display',serif", fontSize: 32, fontWeight: 900, color: C.text }}>
-                <span style={{ textDecoration: "line-through", color: C.textDim, fontSize: 20 }}>{COPY.deliverables.valueCrossed} </span>
-                <GradientText gold>{COPY.deliverables.valueReal}</GradientText>
-              </p>
-            </div>
-            <Button size="md" href={LINKS.intake} />
-          </div>
-        </FadeIn>
-      </div>
-    </section>
-  );
-}
-
-// ── Testimonials ────────────────────────────────────────────────
-function Testimonials() {
-  return (
-    <section style={s.sectionAlt}>
-      <div className="container">
-        <FadeIn>
-          <div style={{ textAlign: "center", marginBottom: 60 }}>
-            <SectionLabel>Client Results</SectionLabel>
-            <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: "clamp(30px,4.5vw,50px)", fontWeight: 800, color: C.text, letterSpacing: "-0.025em", lineHeight: 1.12 }}>
-              {COPY.testimonials.headline}
-            </h2>
-          </div>
-        </FadeIn>
-        <div className="grid-3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 22 }}>
-          {COPY.testimonials.items.map(({ name, role, text, body }, i) => (
-            <FadeIn key={name} delay={i * 0.1}>
-              <div className="card" style={{ padding: "30px", borderRadius: 16, height: "100%" }}>
-                {/* Stars */}
-                <div style={{ display: "flex", gap: 3, marginBottom: 20 }}>
-                  {[...Array(5)].map((_, j) => <Icons.Star key={j} size={14} />)}
-                </div>
-                {/* Quote */}
-                <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, color: "rgba(240,242,255,0.72)", lineHeight: 1.85, fontStyle: "italic", marginBottom: 24 }}>
-                  "{text || body}"
-                </p>
-                {/* Attribution */}
-                <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 18 }}>
-                  <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, fontWeight: 700, color: C.text }}>{name}</p>
-                  <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, color: C.textDim, marginTop: 3 }}>{role}</p>
-                </div>
-              </div>
-            </FadeIn>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ── Guarantee ───────────────────────────────────────────────────
-function Guarantee() {
-  return (
-    <section id="guarantee" style={s.section}>
-      <div className="container">
-        <div style={{ maxWidth: 740, margin: "0 auto" }}>
-          <FadeIn>
-            <div style={{ padding: "60px 52px", borderRadius: 24, border: "1px solid rgba(0,184,150,0.22)", background: "linear-gradient(135deg, rgba(0,184,150,0.05), rgba(0,102,204,0.05))", textAlign: "center", position: "relative", overflow: "hidden" }}>
-              <div style={{ position: "absolute", top: -60, right: -60, width: 220, height: 220, borderRadius: "50%", background: "radial-gradient(circle, rgba(0,184,150,0.08), transparent)", pointerEvents: "none" }} />
-              {/* Icon */}
-              <div style={{ width: 68, height: 68, borderRadius: "50%", background: C.tealDim, border: "1px solid rgba(0,184,150,0.28)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 28px", color: C.teal }}>
-                <Icons.Shield size={28} />
-              </div>
-              <SectionLabel>Performance Guarantee</SectionLabel>
-              <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: "clamp(26px,4vw,40px)", fontWeight: 800, color: C.text, letterSpacing: "-0.025em", lineHeight: 1.12, marginBottom: 20 }}>
-                {COPY.guarantee.headline}
-              </h2>
-              <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 16, color: C.textMuted, lineHeight: 1.85, maxWidth: 520, margin: "0 auto 36px" }}>
-                {COPY.guarantee.body}
-              </p>
-              <div style={{ display: "flex", justifyContent: "center", gap: 28, flexWrap: "wrap", marginBottom: 40 }}>
-                {COPY.guarantee.items.map(item => (
-                  <div key={item} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ color: C.teal }}><Icons.Check size={16} /></span>
-                    <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, color: C.textMuted }}>{item}</span>
-                  </div>
-                ))}
-              </div>
-              <Button size="md" href={LINKS.intake} />
-            </div>
-          </FadeIn>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ── Scarcity ─────────────────────────────────────────────────────
-function Scarcity() {
-  return (
-    <div style={{ padding: "0 0 56px" }}>
-      <div className="container">
-        <FadeIn>
-          <div style={{ padding: "18px 28px", borderRadius: 12, border: "1px solid rgba(201,168,76,0.2)", background: "rgba(201,168,76,0.04)", display: "flex", alignItems: "flex-start", gap: 14 }}>
-            <Icons.Sparkles size={18} color="#C9A84C" style={{ flexShrink: 0, marginTop: 1 }} />
-            <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, color: C.textMuted, lineHeight: 1.7 }}>
-              <strong style={{ color: C.text, fontWeight: 700 }}>Note on availability: </strong>
-              {COPY.scarcity.text}
-            </p>
-          </div>
-        </FadeIn>
-      </div>
-    </div>
-  );
-}
-
-// ── FAQ ────────────────────────────────────────────────────────
-function FAQ() {
-  const [open, setOpen] = useState(null);
-  return (
-    <section style={s.sectionAlt}>
-      <div className="container">
-        <FadeIn>
-          <div style={{ textAlign: "center", marginBottom: 60 }}>
-            <SectionLabel>FAQ</SectionLabel>
-            <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: "clamp(28px,4vw,46px)", fontWeight: 800, color: C.text, letterSpacing: "-0.025em" }}>
-              Common questions.
-            </h2>
-          </div>
-        </FadeIn>
-        <div style={{ maxWidth: 720, margin: "0 auto" }}>
-          {COPY.faq.map(({ q, a }, i) => (
-            <FadeIn key={q} delay={i * 0.05}>
-              <div style={{ borderRadius: 12, border: "1px solid rgba(255,255,255,0.07)", overflow: "hidden", marginBottom: 6 }}>
-                <button onClick={() => setOpen(open === i ? null : i)} style={{
-                  width: "100%", padding: "20px 24px",
-                  background: open === i ? "rgba(0,184,150,0.05)" : "rgba(255,255,255,0.015)",
-                  border: "none", cursor: "pointer",
-                  display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16,
-                  transition: "background 0.2s ease",
-                }}>
-                  <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 15, fontWeight: 600, color: C.text, textAlign: "left" }}>{q}</span>
-                  <span style={{ color: C.teal, flexShrink: 0, transition: "transform 0.28s ease", transform: open === i ? "rotate(180deg)" : "rotate(0)" }}>
-                    <Icons.ChevronDown size={18} />
-                  </span>
-                </button>
-                {open === i && (
-                  <div style={{ padding: "0 24px 20px", background: "rgba(0,184,150,0.025)", animation: "fadeDown 0.25s ease" }}>
-                    <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, color: C.textMuted, lineHeight: 1.85 }}>{a}</p>
-                  </div>
-                )}
-              </div>
-            </FadeIn>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ── Final CTA ────────────────────────────────────────────────────
-function FinalCTA() {
-  return (
-    <section style={s.section}>
-      <div className="container">
-        <FadeIn>
-          <div style={{ maxWidth: 860, margin: "0 auto", padding: "80px 52px", borderRadius: 28, border: "1px solid rgba(255,255,255,0.07)", background: `radial-gradient(ellipse at 50% 0%, rgba(0,184,150,0.09) 0%, transparent 60%), ${C.bgSurface}`, textAlign: "center", position: "relative", overflow: "hidden" }}>
-            <div style={{ position: "absolute", inset: 0, backgroundImage: "linear-gradient(rgba(255,255,255,0.016) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.016) 1px, transparent 1px)", backgroundSize: "40px 40px", pointerEvents: "none" }} />
-            <SectionLabel>Commission Your Report</SectionLabel>
-            <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: "clamp(32px,5.5vw,58px)", fontWeight: 900, color: C.text, letterSpacing: "-0.03em", lineHeight: 1.08, marginBottom: 22, position: "relative" }}>
-              The intelligence your<br />market already contains.<br />
-              <GradientText>Now accessible to you.</GradientText>
-            </h2>
-            <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 17, color: C.textMuted, marginBottom: 44, position: "relative" }}>
-              {PRICE.display} flat · Delivered in {PRICE.delivery} · {PRICE.guarantee}
-            </p>
-            <div style={{ position: "relative" }}>
-              <Button size="lg" href={LINKS.intake} />
-            </div>
-            <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, color: C.textDim, marginTop: 20, position: "relative" }}>
-              Secure checkout via Flutterwave · Instant confirmation
-            </p>
-          </div>
-        </FadeIn>
-      </div>
-    </section>
-  );
-}
-
-// ── Page ────────────────────────────────────────────────────────
-export default function HomePage() {
-  return (
-    <>
-      <Head>
-        <title>{BRAND.name} — Precision Ad Intelligence in 12 Hours</title>
-        <meta name="description" content="We analyze high-performing signals in your market, decode the messaging frameworks driving results, and translate them into tailored creative directions for your brand. Delivered in 12 hours." />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta property="og:title" content={`${BRAND.name} — Strategic Ad Intelligence, 12-Hour Delivery`} />
-        <meta property="og:description" content="Precision market intelligence for DTC brands. $397 flat. Full performance guarantee." />
-        <meta property="og:type" content="website" />
-        <meta name="twitter:card" content="summary_large_image" />
-        <link rel="icon" href="/favicon.ico" />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-      </Head>
-
-      <Navbar transparent />
-      <Hero />
-      <ProofBar />
-      <PainSection />
-      <Divider />
-      <HowItWorks />
-      <Deliverables />
-      <Testimonials />
-      <Guarantee />
-      <Scarcity />
       <FAQ />
       <FinalCTA />
       <Footer />
