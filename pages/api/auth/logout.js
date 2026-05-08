@@ -1,0 +1,12 @@
+/**
+ * pages/api/auth/logout.js
+ * POST /api/auth/logout — clears the auth cookie
+ */
+// pages/api/auth/logout.js
+import { clearAuthCookie } from "../../../lib/auth";
+
+export default function handler(req, res) {
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+  clearAuthCookie(res);
+  return res.status(200).json({ success: true });
+}
