@@ -115,65 +115,6 @@ export function useAuth() {
   if (!ctx) throw new Error("useAuth must be used within AuthProvider");
   return ctx;
 }
-      cursor: "pointer", transition: "all .2s",
-    }}>
-      {label}
-    </button>
-  );
-}
-
-// ════════════════════════════════════════════════════════════════════
-// MAIN MODAL
-// ════════════════════════════════════════════════════════════════════
-export default function AuthModal() {
-  const { modalOpen, modalTab, closeAuth, onAuthSuccess, isLoggedIn } = useAuth();
-
-  const [tab,       setTab]      = useState(modalTab);
-  const [loading,   setLoading]  = useState(false);
-  const [apiError,  setApiError] = useState("");
-  const [fields,    setFields]   = useState({ name: "", email: "", password: "", confirm: "" });
-  const [errs,      setErrs]     = useState({});
-  const modalRef = useRef(null);
-
-  // Sync tab when context changes
-  useEffect(() => { setTab(modalTab); }, [modalTab]);
-
-  // Reset errors when switching tabs
-  useEffect(() => { setErrs({}); setApiError(""); }, [tab]);
-
-  // Lock body scroll when open
-  useEffect(() => {
-    if (modalOpen) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
-    }
-    return () => { document.body.style.overflow = ""; };
-  }, [modalOpen]);
-
-  // Close on ESC
-  useEffect(() => {
-    const fn = e => { if (e.key === "Escape") closeAuth(); };
-    document.addEventListener("keydown", fn);
-    return () => document.removeEventListener("keydown", fn);
-  }, [closeAuth]);
-
-  // Close if already logged in
-  useEffect(() => {
-    if (isLoggedIn && modalOpen) closeAuth();
-  }, [isLoggedIn, modalOpen, closeAuth]);
-
-  const hf = e => setFields(p => ({ ...p, [e.target.name]: e.target.value }));
-
-  // ── Validation ─────────────────────────────────────────────────
-  const validate = () => {
-    const e = {};
-    if (tab === "signup" && !fields.name.trim()) e.name = "Name is required.";
-    if (!fields.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fields.email)) e.email = "Valid email required.";
-    if (!fields.password || fields.password.length < 8) e.password = "At least 8 characters.";
-    if (tab === "signup" && fields.password !== fields.confirm) e.confirm = "Passwords don't match.";
-    setErrs(e);
-    return Object.keys(e).length === 0;
   };
 
   // ── Submit ──────────────────────────────────────────────────────
