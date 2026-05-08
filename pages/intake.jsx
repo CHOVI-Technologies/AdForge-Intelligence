@@ -34,8 +34,8 @@ function openFlutterwave({ orderRef, email, name, onClose }) {
   window.FlutterwaveCheckout({
     public_key:      FLW_KEY,
     tx_ref:          orderRef,
-    amount:          397,
-    currency:        "USD",
+    amount:          PRICE.amount,
+    currency:        PRICE.currency,
     payment_options: "card,banktransfer,ussd",
     redirect_url:    `${SITE}/confirm`,
     customer: {
